@@ -1,0 +1,1748 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>藍鷹出擊：micro:bit 像素空戰</title>
+<link rel="icon" href="data:,">
+<style>
+  :root{
+    --bg:#08111d; --panel:#132a44; --panel2:#0f2238; --line:#2f5f8f;
+    --text:#eaf4ff; --muted:#9fb8d3; --yellow:#ffd23f; --cyan:#4cc9f0;
+    --green:#3ddc97; --red:#ff5a6e; --orange:#ff9f1c;
+    --font:"Microsoft JhengHei","PingFang TC","Noto Sans TC","Heiti TC",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--font);overflow:hidden}
+  body{display:flex;flex-direction:column}
+  button,input,select{font-family:var(--font);font-size:16px}
+
+  /* ── 精簡上方列 ── */
+  .topbar{flex:none;display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;
+    padding:4px 10px;background:#060d17;border-bottom:3px solid var(--line);font-size:14px}
+  .topbar h1{margin:0 6px 0 0;font-size:17px;letter-spacing:1px;color:var(--yellow);text-shadow:2px 2px 0 #7a3b00;white-space:nowrap}
+  .grp{display:flex;align-items:center;gap:6px}
+  .sep{width:2px;height:22px;background:var(--line)}
+  .spacer{flex:1}
+  .dot{width:11px;height:11px;background:#667;display:inline-block;border:2px solid #000;flex:none}
+  .dot.ok{background:var(--green)} .dot.wait{background:var(--yellow)} .dot.warn{background:var(--orange)} .dot.err{background:var(--red)}
+  #btText{font-weight:bold;max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* ── 按鈕 ── */
+  .btn{cursor:pointer;border:3px solid #000;padding:8px 14px;font-weight:bold;color:#1b1b1b;background:var(--yellow);
+    box-shadow:inset -3px -4px 0 rgba(0,0,0,.25), 0 3px 0 #000;border-radius:0;transition:transform .05s}
+  .btn:active{transform:translateY(2px);box-shadow:inset -3px -4px 0 rgba(0,0,0,.25), 0 1px 0 #000}
+  .btn.blue{background:var(--cyan)} .btn.green{background:var(--green)} .btn.red{background:var(--red);color:#fff}
+  .btn.gray{background:#c7d3df} .btn.off{background:#5b6b7c;color:#d7e1ea}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn.big{font-size:20px;padding:12px 26px}
+  .btn.sm{font-size:13px;padding:3px 9px;border-width:2px;box-shadow:inset -2px -3px 0 rgba(0,0,0,.25), 0 2px 0 #000}
+
+  /* ── 滿版遊戲區 ── */
+  #stage{position:relative;flex:1;min-height:0;overflow:hidden;background:#060d17}
+  #game{position:absolute;inset:0;width:100%;height:100%;display:block;outline:none}
+
+  /* ── 右側抽屜（排行榜、設定） ── */
+  .drawer{position:absolute;top:0;right:0;bottom:0;width:330px;max-width:92%;z-index:20;overflow:auto;
+    background:rgba(9,20,35,.96);border-left:3px solid var(--line);padding:10px;display:flex;flex-direction:column;gap:10px;
+    transform:translateX(105%);transition:transform .2s ease}
+  .drawer.open{transform:none}
+  .drawer-head{display:flex;justify-content:space-between;align-items:center}
+  .drawer-head b{color:var(--yellow);font-size:17px}
+  .panel{background:var(--panel);border:3px solid #000;box-shadow:0 0 0 2px var(--line);padding:8px 10px}
+  .panel h2{margin:0 0 6px;font-size:15px;color:var(--yellow)}
+
+  /* ── 排行榜 ── */
+  table.board{width:100%;border-collapse:collapse;font-size:13px}
+  table.board th{color:var(--muted);font-weight:normal;text-align:left;border-bottom:2px solid var(--line);padding:3px 2px}
+  table.board td{padding:3px 2px;border-bottom:1px dashed #24476d}
+  table.board td.num{text-align:right;font-variant-numeric:tabular-nums}
+  table.board tr.me td{background:#5a4a00;color:#fff7c2;font-weight:bold}
+  table.board tr.me td:first-child::before{content:"▶";color:var(--yellow);margin-right:2px}
+  table.board .empty{color:var(--muted);text-align:center;padding:10px}
+  .boardwarn{color:var(--orange);font-size:12px}
+
+  /* ── 設定 ── */
+  .setrow{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:14px}
+  .setrow>label:first-child{flex:0 0 72px;color:var(--muted)}
+  .setrow input[type=range]{flex:1;min-width:0}
+  .setrow output{width:36px;text-align:right;font-weight:bold}
+  .mbraw{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--cyan);background:#061120;padding:5px;border:2px solid #000;margin-top:4px;white-space:pre}
+  .toast{position:absolute;left:50%;top:10px;transform:translate(-50%,-150%);z-index:30;max-width:90%;
+    background:#0f2238;border:3px solid #000;box-shadow:0 0 0 2px var(--line);padding:6px 12px;font-size:14px;transition:transform .25s,opacity .25s;opacity:0;pointer-events:none}
+  .toast.show{transform:translate(-50%,0);opacity:1}
+  .txt{flex:1;min-width:0;padding:4px 6px;border:2px solid #000;font-size:12px}
+  .cloudmsg{font-size:14px;color:var(--cyan);min-height:1.2em}
+  .cloudmsg.err{color:var(--orange)}
+  .small{font-size:12px;color:var(--muted);margin:4px 0 0;line-height:1.5}
+
+  /* ── 覆蓋畫面 ── */
+  .overlay{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;justify-content:safe center;
+    gap:10px;padding:18px;background:rgba(5,12,24,.8);text-align:center;overflow:auto;z-index:10}
+  .overlay.show{display:flex}
+  .overlay>*{max-width:600px}
+  .overlay h2{margin:0;font-size:38px;color:var(--yellow);text-shadow:4px 4px 0 #7a3b00;letter-spacing:3px}
+  .overlay p{margin:2px 0;line-height:1.55}
+  .card{background:var(--panel2);border:3px solid #000;box-shadow:0 0 0 3px var(--line);padding:10px 12px;width:100%;text-align:left}
+  .card h3{margin:0 0 6px;font-size:16px;color:var(--cyan)}
+  .namebox{display:flex;gap:8px;width:100%}
+  .namebox input{flex:1;min-width:0;padding:10px;border:3px solid #000;background:#fff;color:#000;font-size:18px}
+  .namebox select{padding:8px;border:3px solid #000}
+  .err{color:var(--red);font-weight:bold;min-height:1.2em}
+  .keys{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:14px}
+  .keys kbd{background:#e7eef6;color:#000;border:2px solid #000;padding:0 5px;font-family:inherit;font-weight:bold;white-space:nowrap}
+  .legend{display:grid;grid-template-columns:repeat(2,1fr);gap:4px 8px;font-size:13px}
+  .legend div{display:flex;align-items:center;gap:6px}
+  .legend img{width:30px;height:30px;object-fit:contain}
+  .twocol{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%}
+  @media (max-width:700px){.twocol{grid-template-columns:1fr}}
+  .bigscore{font-size:44px;color:var(--yellow);font-weight:bold;text-shadow:3px 3px 0 #000}
+  .newrec{color:var(--green);font-weight:bold;font-size:20px}
+  .errlist{font-family:ui-monospace,Menlo,Consolas,monospace;color:#ffd0d6;font-size:13px;text-align:left;max-height:160px;overflow:auto;width:100%;white-space:pre}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap}
+  .btnrow .btn{flex:1}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <h1>藍鷹出擊</h1>
+  <div class="grp">
+    <span id="btDot" class="dot"></span>
+    <span id="btText">micro:bit 未連線</span>
+    <button id="btnConnect" class="btn sm blue">連接 micro:bit</button>
+    <button id="btnCalib" class="btn sm gray" disabled title="把 micro:bit 平放在想要的「不動」角度後按下">校正</button>
+  </div>
+  <span class="sep"></span>
+  <div class="grp">
+    <button id="btnPause" class="btn sm">暫停</button>
+    <button id="btnResume" class="btn sm blue">繼續</button>
+    <button id="btnRestart" class="btn sm red">重新開始</button>
+  </div>
+  <span class="spacer"></span>
+  <div class="grp">
+    <button id="btnSfx" class="btn sm green" title="音效開關（M 鍵切換全部聲音）">音效 開</button>
+    <button id="btnMusic" class="btn sm green" title="背景音樂開關">音樂 開</button>
+    <button id="btnFull" class="btn sm gray" title="全螢幕（F 鍵）">全螢幕</button>
+    <button id="btnDrawer" class="btn sm">排行榜．設定</button>
+  </div>
+</header>
+
+<div id="stage">
+  <canvas id="game" tabindex="0" aria-label="遊戲畫面"></canvas>
+  <div id="toast" class="toast"></div>
+
+  <!-- 載入中 / 載入失敗 -->
+  <div id="ovLoading" class="overlay show">
+    <h2>載入中…</h2>
+    <p id="loadText">正在載入圖片素材</p>
+    <div id="loadErr" style="display:none;width:100%">
+      <p class="err">圖片載入失敗，遊戲無法開始！</p>
+      <p>找不到以下檔案：</p>
+      <div class="errlist" id="loadErrList"></div>
+      <div class="card" style="margin-top:8px">
+        <h3>請檢查</h3>
+        <p>1. <b>index.html</b> 與 <b>assets</b> 資料夾放在<b>同一層</b>。</p>
+        <p>2. 圖片都放在 <b>assets/</b> 內，檔名與副檔名 <b>.png</b> 不可更改。</p>
+        <p>3. 修正後按 <b>F5</b> 重新整理頁面。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 開始畫面 -->
+  <div id="ovStart" class="overlay">
+    <h2>藍鷹出擊</h2>
+    <p class="small" style="font-size:14px">俯視角直向捲動射擊．擊落敵機、打倒頭目、刷新排行榜！</p>
+    <div class="namebox">
+      <input id="nameInput" maxlength="12" placeholder="請輸入暱稱（1～12 字）" autocomplete="off">
+      <select id="diffSelect" title="難度">
+        <option value="easy">簡單</option>
+        <option value="normal" selected>普通</option>
+        <option value="hard">困難</option>
+      </select>
+    </div>
+    <div class="err" id="nameErr"></div>
+    <button id="btnStart" class="btn big green">開始遊戲</button>
+    <div class="twocol" style="max-width:820px">
+      <div class="card">
+        <h3>操作說明</h3>
+        <div class="keys">
+          <span><kbd>←↑↓→</kbd> / <kbd>WASD</kbd></span><span>移動戰機</span>
+          <span><kbd>空白鍵</kbd></span><span>發射子彈（按住連發）</span>
+          <span><kbd>Shift</kbd></span><span>特殊攻擊：護盾衝擊波</span>
+          <span><kbd>P</kbd></span><span>暫停 / 繼續</span>
+          <span><kbd>M</kbd> / <kbd>F</kbd></span><span>靜音 / 全螢幕</span>
+          <span>micro:bit</span><span>傾斜＝移動，A＝射擊，B＝特殊攻擊</span>
+        </div>
+        <p class="small">燃料會隨時間減少，用完後每 4 秒扣 1 生命，記得撿燃料！</p>
+      </div>
+      <div class="card">
+        <h3>道具與敵機</h3>
+        <div class="legend">
+          <div><img src="assets/燃料補給.png" alt="燃料">燃料 +60</div>
+          <div><img src="assets/護盾道具.png" alt="護盾">護盾 8 秒無敵</div>
+          <div><img src="assets/星星加分道具.png" alt="星星">+500、火力升級</div>
+          <div><img src="assets/愛心生命道具.png" alt="愛心">生命 +1</div>
+          <div><img src="assets/降落傘補給箱.png" alt="補給箱">燃料＋特殊攻擊充滿</div>
+          <div><img src="assets/雪山障礙.png" alt="雪山">雪山：撞到會受傷</div>
+          <div><img src="assets/敵機紅色.png" alt="紅色敵機">紅色 100 分</div>
+          <div><img src="assets/敵機橘色.png" alt="橘色敵機">橘色 150 分</div>
+          <div><img src="assets/敵機紫色.png" alt="紫色敵機">紫色 200 分</div>
+          <div><img src="assets/頭目紅色大型戰機.png" alt="頭目">頭目 3000 分起</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 暫停 -->
+  <div id="ovPause" class="overlay">
+    <h2>暫停中</h2>
+    <p id="pauseReason">按「繼續」或 P 鍵回到遊戲</p>
+    <div class="btnrow" style="width:360px;max-width:90%">
+      <button class="btn green" data-act="resume">繼續</button>
+      <button class="btn" data-act="restart">重新開始</button>
+    </div>
+    <button class="btn gray" data-act="title">回到開始畫面</button>
+  </div>
+
+  <!-- 遊戲結束 -->
+  <div id="ovOver" class="overlay">
+    <h2>任務結束</h2>
+    <p id="overName"></p>
+    <div class="bigscore" id="overScore">0</div>
+    <p id="overStats"></p>
+    <div class="newrec" id="overNew"></div>
+    <p id="overCloud" class="cloudmsg"></p>
+    <p id="overRank"></p>
+    <div class="card" style="max-width:520px">
+      <h3>排行榜 前 10 名</h3>
+      <table class="board" id="overBoard"></table>
+    </div>
+    <div class="btnrow" style="width:420px;max-width:90%">
+      <button class="btn green big" data-act="restart">重新開始</button>
+      <button class="btn gray" data-act="title">更換暱稱</button>
+    </div>
+  </div>
+
+  <!-- 右側抽屜 -->
+  <aside id="drawer" class="drawer" aria-label="排行榜與設定">
+    <div class="drawer-head"><b>排行榜．設定</b><button id="btnDrawerClose" class="btn sm gray">關閉 ✕</button></div>
+
+    <div class="panel">
+      <h2>排行榜 前 10 名</h2>
+      <table class="board" id="sideBoard"></table>
+      <div class="boardwarn" id="boardWarn"></div>
+      <div style="text-align:right;margin-top:6px"><button id="btnClearBoard" class="btn sm gray">清除排行榜</button></div>
+    </div>
+
+    <div class="panel">
+      <h2>雲端紀錄（Google 試算表）</h2>
+      <div class="setrow"><label for="cloudUrl">GAS 網址</label><input id="cloudUrl" class="txt" placeholder="https://script.google.com/macros/s/…/exec"></div>
+      <div class="btnrow" style="margin-top:4px">
+        <button id="btnCloudSave" class="btn sm green">儲存</button>
+        <button id="btnCloudTest" class="btn sm blue">測試連線</button>
+        <button id="btnCloudRetry" class="btn sm">重送暫存</button>
+      </div>
+      <p class="small" id="cloudStatus">尚未設定雲端紀錄</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+        <b style="font-size:14px;color:var(--cyan)">雲端排行榜（全班）</b>
+        <button id="btnCloudTop" class="btn sm gray">重新整理</button>
+      </div>
+      <table class="board" id="cloudBoard"></table>
+    </div>
+
+    <div class="panel">
+      <h2>聲音</h2>
+      <div class="setrow"><label for="setSfxVol">音效音量</label><input type="range" id="setSfxVol" min="0" max="1" step="0.05"><output id="outSfxVol"></output></div>
+      <div class="setrow"><label for="setMusicVol">音樂音量</label><input type="range" id="setMusicVol" min="0" max="1" step="0.05"><output id="outMusicVol"></output></div>
+      <p class="small">上方「音效」「音樂」按鈕可以個別開關，按 M 鍵可一次全部靜音。</p>
+    </div>
+
+    <div class="panel">
+      <h2>micro:bit 操控設定</h2>
+      <div class="setrow"><label for="setSens">靈敏度</label><input type="range" id="setSens" min="0.5" max="2.5" step="0.1"><output id="outSens"></output></div>
+      <div class="setrow"><label for="setDead">死區</label><input type="range" id="setDead" min="0" max="30" step="1"><output id="outDead"></output></div>
+      <div class="setrow"><label>方向反轉</label>
+        <label><input type="checkbox" id="setInvX"> 左右</label>
+        <label><input type="checkbox" id="setInvY"> 前後</label>
+      </div>
+      <div class="mbraw" id="mbRaw">尚未收到 micro:bit 資料</div>
+      <p class="small" id="btHelp"></p>
+      <p class="small">靈敏度越高，傾斜一點點就飛得越快；死區越大，手微微晃動越不會亂飄。</p>
+    </div>
+  </aside>
+</div>
+
+<script>
+'use strict';
+/* =====================================================================
+ * 1. 可調整設定（老師、學生可以改這裡）
+ * ===================================================================== */
+const H = 800;   // 遊戲「邏輯高度」固定 800，所有碰撞都用邏輯座標計算，縮放視窗不會錯位
+let W = 480;     // 邏輯寬度會依視窗比例自動調整（滿版），最窄 420、最寬 1500
+
+const CONFIG = {
+  // 難度：spawn＝敵機出現頻率倍率、speed＝敵機速度倍率、bullet＝敵彈速度與射擊頻率倍率、hp＝初始生命
+  difficulty: {
+    easy:   { label: '簡單', spawn: 0.75, speed: 0.85, bullet: 0.75, hp: 6 },
+    normal: { label: '普通', spawn: 1.00, speed: 1.00, bullet: 1.00, hp: 5 },
+    hard:   { label: '困難', spawn: 1.35, speed: 1.15, bullet: 1.25, hp: 4 },
+  },
+  waveDuration: 40,      // 每一波戰鬥幾秒後出現頭目
+  waveRamp: 0.15,        // 每過一波，敵機數量、速度提高 15%
+  scrollSpeed: 70,       // 背景捲動速度（像素/秒）
+  player: { speed: 330, accel: 14, fireInterval: 0.15, hitRadius: 13, invulnTime: 1.4, maxPower: 4 },
+  special: { cooldown: 12, shieldTime: 3, damage: 3, bossDamage: 15 },  // 特殊攻擊：冷卻秒數、護盾秒數、傷害
+  shieldItemTime: 8,     // 撿到護盾道具的無敵秒數
+  fuel: { max: 100, drainPerSec: 1.4, refill: 60, emptyDamageEvery: 4 },
+  items: { fuelEvery: 22, crateEvery: 35, fallSpeed: 75 },
+  // 預設的 micro:bit 傾斜設定（畫面右下也能即時調整，並會記在瀏覽器中）
+  tilt: { sensitivity: 1.2, deadzone: 10, invertX: false, invertY: false, fullTilt: 55 },
+  microbit: { timeoutMs: 1500, reconnectTries: 3 },
+  sound: { sfxVolume: 0.7, musicVolume: 0.45 },
+  // 雲端紀錄（Google 試算表）：貼上 GAS 網頁應用程式網址（以 /exec 結尾）；留空＝不上傳
+  // 也可以在遊戲的「排行榜．設定」面板中填寫網址（會存在這台電腦）
+  cloud: { url: 'https://script.google.com/macros/s/AKfycbwJkHAuDGpjmMjQ1h96gswEppqz19F6LawPc5CIQHMWVDMPdXkd5ozoMDBVCIc_igyilQ/exec', token: 'skyace-2026', timeoutMs: 12000, maxQueue: 50,
+           queueKey: 'pixelSkyAce.cloudQueue.v1' },   // 預設音量 0～1（遊戲中也能調整）
+  storage: { records: 'pixelSkyAce.records.v1', settings: 'pixelSkyAce.settings.v1' },
+  maxRecords: 10,
+  nameMaxLen: 12,
+};
+
+// 分數表
+const GAME_VERSION = '1.3';
+
+const SCORE = { red: 100, orange: 150, purple: 200, drone: 80, aa: 250, radar: 300,
+  bossBase: 3000, bossPerWave: 1000, star: 500, heart: 200, shield: 200, fuel: 150, crate: 300 };
+
+/* =====================================================================
+ * 2. 素材
+ * ===================================================================== */
+const ASSET_FILES = {
+  bg: '直向飛行天空背景', player: '玩家藍色戰機',
+  red: '敵機紅色', orange: '敵機橘色', purple: '敵機紫色', boss: '頭目紅色大型戰機',
+  drone: '敵方無人機', aa: '地面防空砲',
+  bulletP: '玩家藍色子彈', bulletE: '敵方橘色子彈', expS: '小型爆炸', expL: '大型爆炸',
+  cloud: '雲朵障礙', mountain: '雪山障礙', island: '島嶼跑道機場',
+  bRed: '紅屋頂建築', bBlue: '藍屋頂建築', hangar: '藍色機庫', bridge: '橋梁', radar: '雷達塔',
+  fuel: '燃料補給', shield: '護盾道具', star: '星星加分道具', heart: '愛心生命道具', crate: '降落傘補給箱',
+};
+// 畫在遊戲中的大小（寬, 高），都依原圖比例縮小，不變形
+const SIZE = {
+  player: [64, 54], red: [50, 48], orange: [50, 48], purple: [52, 48], boss: [220, 153],
+  drone: [50, 37], aa: [50, 48], bulletP: [10, 23], bulletE: [10, 22], expS: [58, 52], expL: [140, 125],
+  cloud: [150, 86], mountain: [150, 94], island: [250, 173], bRed: [70, 56], bBlue: [70, 55],
+  hangar: [84, 62], bridge: [130, 75], radar: [54, 62],
+  fuel: [32, 36], shield: [32, 37], star: [36, 36], heart: [38, 34], crate: [42, 52],
+};
+const IMG = {};
+
+function loadAssets() {
+  const jobs = Object.entries(ASSET_FILES).map(([key, file]) => new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => { IMG[key] = img; resolve(null); };
+    img.onerror = () => resolve('assets/' + file + '.png');
+    img.src = 'assets/' + encodeURIComponent(file) + '.png';
+  }));
+  return Promise.all(jobs).then(list => list.filter(Boolean));
+}
+
+/* =====================================================================
+ * 3. 工具
+ * ===================================================================== */
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const rand = (a, b) => a + Math.random() * (b - a);
+const dist2 = (x1, y1, x2, y2) => (x1 - x2) ** 2 + (y1 - y2) ** 2;
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+function inEllipse(px, py, cx, cy, rx, ry, pad) {
+  const a = (px - cx) / (rx + pad), b = (py - cy) / (ry + pad);
+  return a * a + b * b <= 1;
+}
+function pickWeighted(list) {
+  const total = list.reduce((s, [, w]) => s + w, 0);
+  let r = Math.random() * total;
+  for (const [v, w] of list) { if ((r -= w) <= 0) return v; }
+  return list[0][0];
+}
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+/* =====================================================================
+ * 4. 設定與排行榜（localStorage）
+ * ===================================================================== */
+let settings = loadSettings();
+function loadSettings() {
+  const def = { sensitivity: CONFIG.tilt.sensitivity, deadzone: CONFIG.tilt.deadzone,
+    invertX: CONFIG.tilt.invertX, invertY: CONFIG.tilt.invertY, difficulty: 'normal', lastName: '', cloudUrl: '',
+    sfxOn: true, musicOn: true, sfxVol: CONFIG.sound.sfxVolume, musicVol: CONFIG.sound.musicVolume };
+  try {
+    const s = JSON.parse(localStorage.getItem(CONFIG.storage.settings) || '{}');
+    if (!s || typeof s !== 'object') return def;
+    return {
+      sensitivity: Number.isFinite(+s.sensitivity) ? clamp(+s.sensitivity, 0.5, 2.5) : def.sensitivity,
+      deadzone: Number.isFinite(+s.deadzone) ? clamp(+s.deadzone, 0, 30) : def.deadzone,
+      invertX: !!s.invertX, invertY: !!s.invertY,
+      difficulty: CONFIG.difficulty[s.difficulty] ? s.difficulty : 'normal',
+      lastName: sanitizeName(s.lastName),
+      cloudUrl: typeof s.cloudUrl === 'string' ? s.cloudUrl.trim().slice(0, 300) : '',
+      sfxOn: s.sfxOn !== false, musicOn: s.musicOn !== false,
+      sfxVol: Number.isFinite(+s.sfxVol) ? clamp(+s.sfxVol, 0, 1) : def.sfxVol,
+      musicVol: Number.isFinite(+s.musicVol) ? clamp(+s.musicVol, 0, 1) : def.musicVol,
+    };
+  } catch (e) { return def; }
+}
+function saveSettings() {
+  try { localStorage.setItem(CONFIG.storage.settings, JSON.stringify(settings)); } catch (e) { /* 無痕模式等情況可忽略 */ }
+}
+
+// 暱稱清理：去掉前後空白、控制字元與 < >，最多 12 字
+function sanitizeName(s) {
+  s = String(s ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim();
+  return Array.from(s).slice(0, CONFIG.nameMaxLen).join('');
+}
+function normalizeRecord(r) {
+  if (!r || typeof r !== 'object') return null;
+  const score = Math.floor(Number(r.score));
+  const kills = Math.floor(Number(r.kills));
+  if (!Number.isFinite(score) || score < 0 || score > 1e9) return null;
+  return {
+    id: typeof r.id === 'string' ? r.id.slice(0, 40) : uid(),
+    name: sanitizeName(r.name) || '無名飛行員',
+    score,
+    kills: Number.isFinite(kills) && kills >= 0 ? kills : 0,
+    wave: Number.isFinite(+r.wave) && +r.wave >= 1 ? Math.floor(+r.wave) : 1,
+    time: (typeof r.time === 'string' && !isNaN(Date.parse(r.time))) ? r.time : new Date(0).toISOString(),
+  };
+}
+const byRank = (a, b) => b.score - a.score || b.kills - a.kills || Date.parse(a.time) - Date.parse(b.time);
+let boardWarning = '';
+function loadRecords() {
+  let raw = null;
+  try {
+    raw = localStorage.getItem(CONFIG.storage.records);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) throw new Error('不是陣列');
+    return arr.map(normalizeRecord).filter(Boolean).sort(byRank).slice(0, CONFIG.maxRecords);
+  } catch (e) {
+    console.warn('排行榜資料錯誤，已備份並重設：', e);
+    try { if (raw) localStorage.setItem(CONFIG.storage.records + '.backup', raw); localStorage.removeItem(CONFIG.storage.records); } catch (_) {}
+    boardWarning = '排行榜資料格式錯誤，已自動重設（舊資料備份於 .backup）。';
+    return [];
+  }
+}
+function saveRecord(rec) {
+  const clean = normalizeRecord(rec);
+  if (!clean) return { rank: -1, ok: false };
+  const list = loadRecords();
+  list.push(clean);
+  list.sort(byRank);
+  const top = list.slice(0, CONFIG.maxRecords);
+  let ok = true;
+  try { localStorage.setItem(CONFIG.storage.records, JSON.stringify(top)); }
+  catch (e) { ok = false; boardWarning = '無法寫入瀏覽器儲存空間（可能是無痕模式或空間已滿），本次成績不會被保存。'; }
+  return { rank: top.findIndex(r => r.id === clean.id), ok };
+}
+function highScore() { const r = loadRecords(); return r.length ? r[0].score : 0; }
+
+function fmtTime(iso) {
+  const d = new Date(iso); if (isNaN(d)) return '－';
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function renderBoard(table, highlightId) {
+  const recs = loadRecords();
+  table.innerHTML = '';
+  const head = table.insertRow();
+  ['名次', '暱稱', '分數', '擊落', '時間'].forEach(t => { const th = document.createElement('th'); th.textContent = t; head.appendChild(th); });
+  if (!recs.length) {
+    const td = table.insertRow().insertCell(); td.colSpan = 5; td.className = 'empty'; td.textContent = '尚無紀錄，快來搶第一名！';
+    return;
+  }
+  recs.forEach((r, i) => {
+    const tr = table.insertRow();
+    if (highlightId && r.id === highlightId) tr.className = 'me';
+    const cells = [i + 1, r.name, r.score.toLocaleString(), r.kills, fmtTime(r.time)];
+    cells.forEach((v, j) => { const td = tr.insertCell(); td.textContent = v; if (j === 2 || j === 3) td.className = 'num'; });
+    tr.title = `第 ${r.wave} 波．${new Date(r.time).toLocaleString('zh-TW')}`;
+  });
+}
+function refreshBoards() {
+  const id = G ? G.recordId : null;
+  renderBoard($('sideBoard'), id);
+  renderBoard($('overBoard'), id);
+  $('boardWarn').textContent = boardWarning;
+}
+
+/* =====================================================================
+ * 5. 畫布與縮放
+ * ===================================================================== */
+const canvas = $('game');
+const ctx = canvas.getContext('2d');
+const stage = $('stage');
+const HAS_FILTER = 'filter' in ctx;
+let VIEW = { scale: 1, ox: 0, oy: 0 };
+function resize() {
+  const r = stage.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.max(1, Math.round(r.width * dpr));
+  canvas.height = Math.max(1, Math.round(r.height * dpr));
+  W = clamp(Math.round(H * r.width / Math.max(1, r.height)), 420, 1500);
+  const scale = Math.min(canvas.width / W, canvas.height / H);
+  VIEW = { scale, ox: (canvas.width - W * scale) / 2, oy: (canvas.height - H * scale) / 2 };
+  if (P) { P.x = clamp(P.x, SIZE.player[0] / 2, W - SIZE.player[0] / 2); }
+}
+new ResizeObserver(resize).observe(stage);
+window.addEventListener('resize', resize);
+
+/* =====================================================================
+ * 6. 輸入：鍵盤
+ * ===================================================================== */
+const keys = new Set();
+let specialRequested = false;
+const GAME_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyP'];
+function typing(e) { const t = e.target; return t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA'); }
+window.addEventListener('keydown', e => {
+  if (typing(e)) {
+    if (e.key === 'Enter' && e.target.id === 'nameInput') startGame();
+    return;
+  }
+  if (GAME_KEYS.includes(e.code) && state !== 'start') e.preventDefault();
+  if (e.code === 'KeyM' && !e.repeat) { toggleSound('all'); return; }
+  if (e.code === 'KeyF' && !e.repeat) { toggleFullscreen(); return; }
+  if (e.code === 'Escape' && $('drawer').classList.contains('open')) { setDrawer(false); return; }
+  if (e.code === 'KeyP' && !e.repeat) { if (state === 'playing') pauseGame(); else if (state === 'paused') resumeGame(); return; }
+  if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) specialRequested = true;
+  if (e.code === 'Enter' && state === 'over') restartGame();
+  keys.add(e.code);
+});
+window.addEventListener('keyup', e => { keys.delete(e.code); if (e.code === 'Space' && state !== 'start' && !typing(e)) e.preventDefault(); });
+window.addEventListener('blur', () => { keys.clear(); if (state === 'playing') pauseGame('視窗切換到別處，遊戲自動暫停'); });
+
+/* =====================================================================
+ * 7. 輸入：micro:bit（Web Bluetooth UART）
+ * ---------------------------------------------------------------------
+ * micro:bit → 瀏覽器：每 60 毫秒一行「x,y,a,b」
+ *   x、y：傾斜量 -100～100（加速度 ÷10）；a、b：按鍵 0 或 1
+ * 瀏覽器 → micro:bit：狀態改變時才傳一個字母（換行結尾）
+ *   C 已連線　G 遊戲中　S 特殊攻擊冷卻中　H 受傷　P 暫停　O 遊戲結束
+ * ===================================================================== */
+const UART_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+const UART_TX_CHAR = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';  // micro:bit 傳出（通知）
+const UART_RX_CHAR = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';  // 寫入 micro:bit
+const mb = { device: null, rx: null, connected: false, connecting: false, manualDisconnect: false,
+  x: 0, y: 0, a: false, b: false, prevB: false, offX: 0, offY: 0, buf: '',
+  lastData: 0, good: 0, bad: 0, stale: false, lastMode: '', writeChain: Promise.resolve() };
+const enc = new TextEncoder(), dec = new TextDecoder();
+
+function setBt(kind, text, help) {
+  $('btDot').className = 'dot ' + kind;
+  $('btText').textContent = text;
+  if (help !== undefined) { $('btHelp').textContent = help; if (help) toast(help); }
+  $('btText').title = (help || text);
+}
+function mbUsable() { return mb.connected && !mb.stale; }
+
+async function connectMicrobit() {
+  if (mb.connected) { mb.manualDisconnect = true; try { mb.device.gatt.disconnect(); } catch (_) {} return; }
+  if (mb.connecting) return;
+  if (!navigator.bluetooth) {
+    setBt('err', '此瀏覽器不支援藍牙連線', '請改用電腦版 Chrome 或 Edge，並用 https:// 或 http://localhost 開啟。仍可用鍵盤遊玩。');
+    return;
+  }
+  if (!window.isSecureContext) {
+    setBt('err', '目前網址無法使用藍牙', 'Web Bluetooth 只能在 https:// 或 http://localhost 下使用，請依說明用本機伺服器開啟。仍可用鍵盤遊玩。');
+    return;
+  }
+  try {
+    if (navigator.bluetooth.getAvailability && !(await navigator.bluetooth.getAvailability())) {
+      setBt('err', '電腦藍牙未開啟', '請開啟電腦藍牙後再試（Mac 需允許 Chrome 使用藍牙）。');
+      return;
+    }
+  } catch (_) {}
+  mb.connecting = true;
+  setBt('wait', '請在跳出的視窗選擇 micro:bit…', '');
+  try {
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: 'BBC micro:bit' }], optionalServices: [UART_SERVICE] });
+    mb.device = device;
+    device.addEventListener('gattserverdisconnected', onMbDisconnected);
+    await openGatt();
+  } catch (e) {
+    console.warn(e);
+    if (e.name === 'NotFoundError' && /cancel/i.test(e.message)) setBt('', 'micro:bit 未連線', '已取消選擇裝置。');
+    else if (e.name === 'NotFoundError') setBt('err', '找不到 UART 服務', '請確認 micro:bit 已燒錄本遊戲的 MakeCode 程式（含 Bluetooth 擴充功能與 UART 服務）。');
+    else if (e.name === 'SecurityError') setBt('err', '藍牙被瀏覽器封鎖', '請用 https 或 localhost 開啟，並允許網站使用藍牙。');
+    else setBt('err', '連線失敗', '錯誤：' + e.message + '。可重按 micro:bit 背面 Reset 後再試。');
+  } finally { mb.connecting = false; updateBtButtons(); }
+}
+
+async function openGatt() {
+  setBt('wait', '正在連線 ' + (mb.device.name || 'micro:bit') + '…');
+  const server = await mb.device.gatt.connect();
+  const svc = await server.getPrimaryService(UART_SERVICE);
+  const tx = await svc.getCharacteristic(UART_TX_CHAR);
+  mb.rx = await svc.getCharacteristic(UART_RX_CHAR);
+  await tx.startNotifications();
+  tx.addEventListener('characteristicvaluechanged', onMbData);
+  mb.connected = true; mb.stale = false; mb.buf = ''; mb.lastData = performance.now(); mb.lastMode = '';
+  mb.manualDisconnect = false; mb.writeChain = Promise.resolve();
+  setBt('ok', '已連線：' + (mb.device.name || 'micro:bit'), '傾斜 micro:bit 移動戰機，A 射擊、B 特殊攻擊。');
+  Sound.play('pickup');
+  updateBtButtons();
+}
+
+function onMbDisconnected() {
+  const wasConnected = mb.connected;
+  mb.connected = false; mb.rx = null; mb.a = mb.b = false;
+  updateBtButtons();
+  if (mb.manualDisconnect) { setBt('', 'micro:bit 已中斷連線', ''); return; }
+  if (state === 'playing') pauseGame('micro:bit 斷線了！可重新連線，或直接按「繼續」改用鍵盤。');
+  if (wasConnected) tryReconnect(1);
+}
+async function tryReconnect(n) {
+  if (!mb.device || mb.connected) return;
+  if (n > CONFIG.microbit.reconnectTries) {
+    setBt('err', 'micro:bit 已斷線', '自動重連失敗，請確認 micro:bit 有電且在附近，再按「連接 micro:bit」。');
+    return;
+  }
+  setBt('wait', `micro:bit 斷線，自動重連中（${n}/${CONFIG.microbit.reconnectTries}）…`);
+  await new Promise(r => setTimeout(r, 800 * n));
+  try { await openGatt(); } catch (e) { console.warn(e); tryReconnect(n + 1); }
+}
+
+// 接收資料：可能一次收到半行或多行，所以先放進緩衝區，再以換行切開
+function onMbData(ev) {
+  mb.buf += dec.decode(ev.target.value);
+  if (mb.buf.length > 256) { mb.buf = ''; mb.bad++; return; }   // 異常的超長資料直接丟掉
+  const lines = mb.buf.split(/\r?\n/);
+  mb.buf = lines.pop();
+  for (const line of lines) parseMbLine(line.trim());
+}
+function parseMbLine(line) {
+  if (!line) return;
+  const m = /^(-?\d{1,4}),(-?\d{1,4}),([01]),([01])$/.exec(line);
+  if (!m) { mb.bad++; return; }
+  const x = +m[1], y = +m[2];
+  if (Math.abs(x) > 100 || Math.abs(y) > 100) { mb.bad++; return; }
+  mb.x = x; mb.y = y; mb.a = m[3] === '1'; mb.b = m[4] === '1';
+  if (mb.b && !mb.prevB) specialRequested = true;          // B 鍵「剛按下」才觸發一次
+  mb.prevB = mb.b;
+  mb.good++; mb.lastData = performance.now();
+  if (mb.stale) { mb.stale = false; setBt('ok', '已連線：' + (mb.device?.name || 'micro:bit'), '訊號恢復。'); }
+}
+function mbWatchdog(now) {
+  if (mb.connected && !mb.stale && now - mb.lastData > CONFIG.microbit.timeoutMs) {
+    mb.stale = true; mb.a = mb.b = false;
+    setBt('warn', 'micro:bit 訊號中斷', '超過 1.5 秒沒有收到資料，暫時改用鍵盤。請確認 micro:bit 程式正在執行。');
+  }
+}
+// 傳送給 micro:bit（排隊送出，避免「GATT 正在忙碌」錯誤）
+function mbWrite(cmd) {
+  if (!mb.connected || !mb.rx) return;
+  const data = enc.encode(cmd + '\n');
+  const rx = mb.rx;
+  mb.writeChain = mb.writeChain.then(() => {
+    if (rx.writeValueWithResponse) return rx.writeValueWithResponse(data);
+    return rx.writeValue(data);
+  }).catch(err => console.warn('傳送到 micro:bit 失敗：', err));
+}
+function mbSetMode(mode) { if (mode !== mb.lastMode) { mb.lastMode = mode; mbWrite(mode); } }
+
+function tiltAxis(v, off, invert) {
+  let d = (v - off) * (invert ? -1 : 1);
+  const a = Math.abs(d), dz = settings.deadzone;
+  if (a <= dz) return 0;
+  const n = (a - dz) / Math.max(5, CONFIG.tilt.fullTilt - dz) * settings.sensitivity;
+  return Math.sign(d) * Math.min(1, n);
+}
+function updateBtButtons() {
+  $('btnConnect').textContent = mb.connected ? '中斷 micro:bit' : '連接 micro:bit';
+  $('btnCalib').disabled = !mb.connected;
+}
+$('btnConnect').addEventListener('click', e => { e.currentTarget.blur(); connectMicrobit(); });
+$('btnCalib').addEventListener('click', e => {
+  e.currentTarget.blur();
+  mb.offX = mb.x; mb.offY = mb.y;
+  $('btHelp').textContent = `已把目前角度設為水平（X=${mb.x}, Y=${mb.y}）。`;
+});
+
+
+/* =====================================================================
+ * 7-B. 音效與背景音樂（Web Audio API 即時合成 8-bit 聲音，不需要音效檔）
+ * ===================================================================== */
+const Sound = (() => {
+  let ac = null, master, sfxBus, musicBus, noiseBuf;
+  const lastPlay = {};
+  // 同一種音效的最短間隔（秒），避免連發時太吵
+  const MIN_GAP = { shoot: 0.05, hit: 0.035, explodeS: 0.05, enemyShot: 0.09, block: 0.06 };
+  const midi = m => 440 * Math.pow(2, (m - 69) / 12);
+
+  function init() {
+    if (ac) return true;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return false;
+    ac = new AC();
+    master = ac.createGain(); master.gain.value = 0.9; master.connect(ac.destination);
+    sfxBus = ac.createGain(); sfxBus.connect(master);
+    musicBus = ac.createGain(); musicBus.connect(master);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    apply();
+    return true;
+  }
+  // 瀏覽器規定：要使用者先點一下或按鍵，才可以播放聲音
+  function unlock() { if (init() && ac.state === 'suspended') ac.resume(); }
+  function apply() {
+    if (!ac) return;
+    sfxBus.gain.setTargetAtTime(settings.sfxOn ? settings.sfxVol : 0, ac.currentTime, 0.02);
+    musicBus.gain.setTargetAtTime(settings.musicOn ? settings.musicVol * 0.55 : 0, ac.currentTime, 0.05);
+  }
+  function tone(o, bus = sfxBus) {
+    const t = ac.currentTime + (o.delay || 0), dur = o.dur || 0.1;
+    const osc = ac.createOscillator(), g = ac.createGain();
+    osc.type = o.type || 'square';
+    osc.frequency.setValueAtTime(o.f0, t);
+    if (o.f1 && o.f1 !== o.f0) osc.frequency.exponentialRampToValueAtTime(Math.max(20, o.f1), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(o.vol || 0.2, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g); g.connect(bus);
+    osc.start(t); osc.stop(t + dur + 0.03);
+  }
+  function noise(o, bus = sfxBus) {
+    const t = ac.currentTime + (o.delay || 0), dur = o.dur || 0.3;
+    const src = ac.createBufferSource(); src.buffer = noiseBuf;
+    const f = ac.createBiquadFilter(); f.type = o.filter || 'lowpass';
+    f.frequency.setValueAtTime(o.f0 || 3000, t);
+    f.frequency.exponentialRampToValueAtTime(Math.max(40, o.f1 || 200), t + dur);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(o.vol || 0.3, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f); f.connect(g); g.connect(bus);
+    src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.05);
+  }
+  const arp = (notes, step, o) => notes.forEach((n, i) => tone({ type: 'square', f0: midi(n), dur: step * 1.2, vol: 0.12, ...o, delay: i * step + ((o && o.delay) || 0) }));
+
+  const FX = {
+    shoot:     () => tone({ type: 'square', f0: 1100, f1: 520, dur: 0.06, vol: 0.06 }),
+    enemyShot: () => tone({ type: 'triangle', f0: 620, f1: 300, dur: 0.08, vol: 0.06 }),
+    hit:       () => tone({ type: 'square', f0: 240, f1: 120, dur: 0.05, vol: 0.08 }),
+    block:     () => tone({ type: 'sine', f0: 1500, f1: 1900, dur: 0.06, vol: 0.08 }),
+    explodeS:  () => { noise({ dur: 0.32, vol: 0.32, f0: 4000, f1: 200 }); tone({ type: 'square', f0: 180, f1: 50, dur: 0.18, vol: 0.08 }); },
+    explodeL:  () => { noise({ dur: 0.9, vol: 0.5, f0: 1800, f1: 60 }); tone({ type: 'triangle', f0: 140, f1: 35, dur: 0.7, vol: 0.4 }); },
+    hurt:      () => { tone({ type: 'sawtooth', f0: 420, f1: 70, dur: 0.38, vol: 0.2 }); noise({ dur: 0.25, vol: 0.25, f0: 2500, f1: 300 }); },
+    pickup:    () => arp([76, 81, 88], 0.055),
+    powerup:   () => arp([64, 68, 71, 76, 80, 83, 88], 0.045, { vol: 0.1 }),
+    heal:      () => arp([72, 76, 79, 84], 0.07, { type: 'triangle', vol: 0.22 }),
+    shield:    () => { tone({ type: 'triangle', f0: 300, f1: 1200, dur: 0.35, vol: 0.22 }); tone({ type: 'sine', f0: 600, f1: 2400, dur: 0.35, vol: 0.08 }); },
+    special:   () => { tone({ type: 'sawtooth', f0: 160, f1: 1400, dur: 0.45, vol: 0.18 }); noise({ dur: 0.7, vol: 0.35, f0: 6000, f1: 300, filter: 'bandpass' }); },
+    denied:    () => { tone({ type: 'square', f0: 180, dur: 0.07, vol: 0.1 }); tone({ type: 'square', f0: 140, dur: 0.1, vol: 0.1, delay: 0.09 }); },
+    warning:   () => { for (let i = 0; i < 4; i++) { tone({ type: 'square', f0: 880, dur: 0.18, vol: 0.1, delay: i * 0.4 }); tone({ type: 'square', f0: 660, dur: 0.18, vol: 0.1, delay: i * 0.4 + 0.2 }); } },
+    fuelLow:   () => { tone({ type: 'square', f0: 990, dur: 0.08, vol: 0.08 }); tone({ type: 'square', f0: 990, dur: 0.08, vol: 0.08, delay: 0.14 }); },
+    waveClear: () => arp([67, 72, 76, 79, 84, 79, 84], 0.11, { vol: 0.13 }),
+    start:     () => arp([60, 64, 67, 72], 0.08, { vol: 0.12 }),
+    gameOver:  () => arp([72, 67, 64, 60, 55], 0.2, { type: 'triangle', vol: 0.25 }),
+    click:     () => tone({ type: 'square', f0: 700, dur: 0.03, vol: 0.05 }),
+  };
+  function play(name) {
+    if (!ac || !settings.sfxOn || ac.state !== 'running' || !FX[name]) return;
+    const now = ac.currentTime;
+    if (MIN_GAP[name] && lastPlay[name] && now - lastPlay[name] < MIN_GAP[name]) return;
+    lastPlay[name] = now;
+    FX[name]();
+  }
+
+  // ── 背景音樂：兩首 8-bit 循環曲（一般／頭目戰），0 代表休止 ──
+  const SONGS = {
+    main: { bpm: 140,
+      bass: [45,57,45,57,45,57,45,57, 41,53,41,53,41,53,41,53, 43,55,43,55,43,55,43,55, 40,52,40,52,40,52,44,52],
+      lead: [69,0,72,0,76,0,74,72, 72,0,69,0,65,0,67,69, 67,0,71,0,74,0,72,71, 69,0,68,0,64,0,0,0] },
+    boss: { bpm: 168,
+      bass: [40,40,52,40,40,52,40,52, 40,40,52,40,40,52,40,52, 36,36,48,36,36,48,36,48, 38,38,50,38,39,51,39,51],
+      lead: [76,0,79,76,0,74,0,71, 72,0,71,0,69,0,67,0, 76,79,83,0,81,79,76,0, 75,0,71,0,0,0,0,0] },
+  };
+  let musicTimer = null, track = 'main', step = 0, nextT = 0;
+  function scheduleMusic() {
+    const song = SONGS[track], t8 = 60 / song.bpm / 2;
+    while (nextT < ac.currentTime + 0.2) {
+      const b = song.bass[step], l = song.lead[step];
+      if (b) tone({ type: 'triangle', f0: midi(b), dur: t8 * 0.9, vol: 0.32, delay: nextT - ac.currentTime }, musicBus);
+      if (l) tone({ type: 'square', f0: midi(l), dur: t8 * 0.85, vol: 0.09, delay: nextT - ac.currentTime }, musicBus);
+      if (step % 2 === 1) noise({ dur: 0.04, vol: 0.06, f0: 9000, f1: 5000, filter: 'highpass', delay: nextT - ac.currentTime }, musicBus);
+      nextT += t8; step = (step + 1) % song.bass.length;
+    }
+  }
+  function startMusic(name) {
+    if (!init()) return;
+    if (name && name !== track) { track = name; step = 0; }
+    if (musicTimer) return;
+    nextT = ac.currentTime + 0.08;
+    musicTimer = setInterval(scheduleMusic, 60);
+  }
+  function stopMusic() { clearInterval(musicTimer); musicTimer = null; }
+  function setTrack(name) { if (name !== track) { track = name; step = 0; } }
+  return { unlock, apply, play, startMusic, stopMusic, setTrack };
+})();
+['pointerdown', 'keydown'].forEach(ev => window.addEventListener(ev, Sound.unlock, { passive: true }));
+
+
+/* =====================================================================
+ * 7-C. 雲端紀錄：把成績上傳到 Google 試算表（Google Apps Script 網頁應用程式）
+ * ---------------------------------------------------------------------
+ * - 遊戲結束時自動上傳；網路失敗會先暫存在這台電腦，下次開啟或下一局結束時自動重送
+ * - 用 text/plain 送出 JSON，不會觸發 CORS 預檢，GAS 可直接接收
+ * ===================================================================== */
+const Cloud = (() => {
+  const GAS_RE = /^https:\/\/script\.google\.com\/(a\/[^/]+\/)?macros\/s\/[\w-]+\/exec$/;
+  let busy = false;
+  const url = () => (settings.cloudUrl || CONFIG.cloud.url || '').trim();
+  const enabled = () => GAS_RE.test(url());
+
+  function loadQueue() {
+    try {
+      const q = JSON.parse(localStorage.getItem(CONFIG.cloud.queueKey) || '[]');
+      return Array.isArray(q) ? q.filter(x => x && typeof x === 'object' && typeof x.id === 'string') : [];
+    } catch (e) { return []; }
+  }
+  function saveQueue(q) {
+    try { localStorage.setItem(CONFIG.cloud.queueKey, JSON.stringify(q.slice(-CONFIG.cloud.maxQueue))); } catch (e) {}
+  }
+  async function request(u, opts) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), CONFIG.cloud.timeoutMs);
+    try {
+      const res = await fetch(u, { ...opts, signal: ctrl.signal, redirect: 'follow' });
+      const text = await res.text();
+      try { return JSON.parse(text); }
+      catch (e) { throw Object.assign(new Error('GAS 回傳的不是 JSON，請確認部署權限為「所有人」'), { retry: true }); }
+    } catch (e) {
+      if (e.name === 'AbortError') throw Object.assign(new Error('連線逾時'), { retry: true });
+      if (e instanceof TypeError) throw Object.assign(new Error('無法連線（請檢查網路或網址）'), { retry: true });
+      throw e;
+    } finally { clearTimeout(timer); }
+  }
+  async function post(rec) {
+    const data = await request(url(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ token: CONFIG.cloud.token, record: rec }),
+    });
+    if (!data.ok) throw Object.assign(new Error(data.error || '伺服器拒絕'), { retry: data.retry !== false });
+    return data;
+  }
+  // 把暫存的紀錄依序送出
+  async function flush() {
+    const before = loadQueue().length;
+    if (!enabled()) { report({ disabled: true, left: before }); return { disabled: true, left: before }; }
+    if (busy) return { busy: true, left: before };
+    busy = true;
+    let sent = 0, error = null, dropped = 0;
+    try {
+      for (const rec of loadQueue()) {
+        try { await post(rec); sent++; saveQueue(loadQueue().filter(x => x.id !== rec.id)); }
+        catch (e) {
+          error = e;
+          if (e.retry === false) { dropped++; saveQueue(loadQueue().filter(x => x.id !== rec.id)); continue; }   // 資料本身有誤：丟棄
+          break;                                                                                                 // 網路問題：之後再試
+        }
+      }
+    } finally { busy = false; }
+    const result = { sent, dropped, error, left: loadQueue().length };
+    report(result);
+    return result;
+  }
+  async function submit(rec) {
+    const q = loadQueue();
+    if (!q.some(x => x.id === rec.id)) q.push(rec);
+    saveQueue(q);
+    if (!enabled()) { report({ disabled: true, left: q.length }); return; }
+    setOverCloud('雲端紀錄：上傳中…', false);
+    const r = await flush();
+    if (r.busy) return;
+    const mine = !loadQueue().some(x => x.id === rec.id);
+    if (mine && !(r.error && r.error.retry === false && r.dropped)) setOverCloud('✔ 已記錄到 Google 試算表', false);
+    else if (r.error && r.error.retry === false) setOverCloud('✘ 雲端拒收這筆資料：' + r.error.message, true);
+    else setOverCloud(`⚠ 上傳失敗（${r.error ? r.error.message : '未知原因'}），成績已暫存在這台電腦，稍後會自動重送`, true);
+    if (mine) loadTop();
+  }
+  async function ping() {
+    if (!enabled()) throw new Error('網址格式不正確，應為 https://script.google.com/macros/s/…/exec');
+    const data = await request(url() + '?action=ping', { method: 'GET' });
+    if (!data.ok) throw new Error(data.error || '連線失敗');
+    return data;
+  }
+  async function top(limit = 10) {
+    const data = await request(url() + '?action=top&limit=' + limit, { method: 'GET' });
+    if (!data.ok || !Array.isArray(data.records)) throw new Error(data.error || '資料格式錯誤');
+    return data.records.map(r => normalizeRecord({ ...r, id: 'cloud' })).filter(Boolean);
+  }
+  function report(r) {
+    const el = $('cloudStatus'); if (!el) return;
+    const left = r.left || 0;
+    $('btnCloudRetry').textContent = left ? `重送暫存（${left}）` : '重送暫存';
+    if (r.disabled) { el.textContent = left ? `尚未設定 GAS 網址（有 ${left} 筆成績暫存在這台電腦）` : '尚未設定 GAS 網址，成績只存在這台電腦'; return; }
+    if (r.error) el.textContent = `上次上傳：${r.error.message}${left ? `（暫存 ${left} 筆）` : ''}`;
+    else el.textContent = r.sent ? `已上傳 ${r.sent} 筆成績 ✔` : '雲端紀錄已啟用，遊戲結束會自動上傳';
+  }
+  return { submit, flush, ping, top, enabled, report, pending: () => loadQueue().length };
+})();
+function setOverCloud(msg, isErr) { const el = $('overCloud'); el.textContent = msg; el.classList.toggle('err', !!isErr); }
+function browserSummary() {
+  const ua = navigator.userAgent;
+  const b = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : '其他';
+  const os = /CrOS/.test(ua) ? 'ChromeOS' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'macOS' : /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Linux/.test(ua) ? 'Linux' : '';
+  return (b + ' / ' + os).slice(0, 40);
+}
+function renderCloudBoard(recs, msg) {
+  const t = $('cloudBoard'); t.innerHTML = '';
+  const head = t.insertRow();
+  ['名次', '暱稱', '分數', '擊落'].forEach(x => { const th = document.createElement('th'); th.textContent = x; head.appendChild(th); });
+  if (msg || !recs.length) { const td = t.insertRow().insertCell(); td.colSpan = 4; td.className = 'empty'; td.textContent = msg || '雲端還沒有紀錄'; return; }
+  recs.forEach((r, i) => {
+    const tr = t.insertRow();
+    if (playerName && r.name === playerName) tr.className = 'me';
+    [i + 1, r.name, r.score.toLocaleString(), r.kills].forEach((v, j) => { const td = tr.insertCell(); td.textContent = v; if (j >= 2) td.className = 'num'; });
+    tr.title = `${r.difficulty || ''}．第 ${r.wave} 波．${fmtTime(r.time)}`;
+  });
+}
+async function loadTop() {
+  if (!Cloud.enabled()) { renderCloudBoard([], '設定 GAS 網址後即可看到全班排行榜'); return; }
+  renderCloudBoard([], '讀取中…');
+  try { renderCloudBoard(await Cloud.top(10)); }
+  catch (e) { renderCloudBoard([], '讀取失敗：' + e.message); }
+}
+
+/* =====================================================================
+ * 8. 遊戲狀態
+ * ===================================================================== */
+let state = 'loading';     // loading | start | playing | paused | over
+let G = null, P = null;    // G＝本局資料，P＝玩家
+let playerName = '';
+let bgScroll = 0, bgTileH = 853;
+
+function newGame() {
+  const d = CONFIG.difficulty[settings.difficulty] || CONFIG.difficulty.normal;
+  G = { diff: d, time: 0, wave: 1, waveTime: 0, boss: null, score: 0, kills: 0, recordId: null,
+    spawnT: 1.5, groundT: 1, cloudT: 0.5, fuelItemT: CONFIG.items.fuelEvery, crateT: CONFIG.items.crateEvery,
+    enemies: [], pBullets: [], eBullets: [], items: [], ground: [], clouds: [], fx: [], texts: [], rings: [],
+    shake: 0, banner: { text: '第 1 波', sub: '準備迎戰！', t: 2.5, color: '#ffd23f' }, dying: 0, fuelWarned: false,
+    startedAt: new Date().toISOString(), usedMicrobit: false, specials: 0, itemsTaken: 0, lastHurt: '' };
+  P = { x: W / 2, y: H - 110, vx: 0, vy: 0, hp: d.hp, maxHp: d.hp, inv: 1.5, fireT: 0, power: 1,
+    shieldT: 0, specialCd: 0, fuel: CONFIG.fuel.max, fuelDmgT: CONFIG.fuel.emptyDamageEvery, dead: false };
+  specialRequested = false;
+  for (let i = 0; i < 3; i++) spawnCloud(rand(50, H - 200));
+}
+// 目前難度倍率：波次越後面越難，同一波內也會慢慢變難
+const widthFactor = () => 0.4 + 0.6 * clamp(W / 480, 1, 3);   // 畫面越寬，敵機越多
+const dm = () => 1 + (G.wave - 1) * CONFIG.waveRamp + Math.min(G.waveTime / CONFIG.waveDuration, 1) * 0.12;
+
+/* ---------- 生成 ---------- */
+const ENEMY = {
+  red:    { hp: 1, r: 19, speed: 150, fire: [2.4, 3.8], drop: 0.08 },
+  orange: { hp: 2, r: 19, speed: 105, fire: [1.7, 2.6], drop: 0.11 },
+  purple: { hp: 3, r: 20, speed: 135, fire: null,       drop: 0.15 },
+  drone:  { hp: 1, r: 17, speed: 125, fire: [2.2, 3.4], drop: 0.05 },
+};
+function makeEnemy(type, x, y) {
+  const d = ENEMY[type], sp = G.diff.speed * (1 + (dm() - 1) * 0.5);
+  const hp = d.hp + (type !== 'drone' ? Math.floor((G.wave - 1) / 2) : 0);
+  const [w, h] = SIZE[type];
+  return { type, x, y, w, h, hp, r: d.r, t: 0, baseX: x, vx: 0, vy: d.speed * sp, phase: 'enter',
+    stopY: rand(110, 260), fireT: d.fire ? rand(d.fire[0], d.fire[1]) * 0.6 : 0, flash: 0, off: rand(0, 6) };
+}
+function spawnEnemy() {
+  const w = G.wave;
+  const pool = G.boss ? [['red', 60], ['drone', 40]]
+    : [['red', 50], ['orange', 30], ['purple', w >= 2 ? 22 + w * 3 : 8], ['drone', 14]];
+  const type = pickWeighted(pool);
+  if (type === 'drone') { spawnDroneGroup(); return; }
+  const x = type === 'orange' ? rand(90, W - 90) : rand(40, W - 40);
+  G.enemies.push(makeEnemy(type, x, -40));
+  // 後面的波次偶爾成對出現
+  if (type === 'red' && Math.random() < Math.min(0.5, 0.1 * w)) G.enemies.push(makeEnemy('red', clamp(x + rand(-90, 90), 40, W - 40), -110));
+}
+function spawnDroneGroup() {
+  const cx = rand(110, W - 110);
+  for (let i = -1; i <= 1; i++) {
+    const e = makeEnemy('drone', cx + i * 55, -40 - Math.abs(i) * 30);
+    e.stopY = 140 + Math.abs(i) * 30;
+    G.enemies.push(e);
+  }
+}
+function spawnCloud(y) {
+  const s = rand(0.7, 1.15);
+  G.clouds.push({ x: rand(30, W - 30), y: y ?? -60, w: SIZE.cloud[0] * s, h: SIZE.cloud[1] * s, speed: rand(95, 125), alpha: rand(0.55, 0.8) });
+}
+function addGround(kind, x, y) {
+  const [w, h] = SIZE[kind];
+  const g = { kind, x, y, w, h, target: false, solid: false, hp: 0, maxHp: 0, r: 0, fireT: 0, flash: 0 };
+  if (kind === 'aa') { g.target = true; g.hp = g.maxHp = 4 + Math.floor(G.wave / 2); g.r = 21; g.fireT = rand(0.8, 1.8); }
+  if (kind === 'radar') { g.target = true; g.hp = g.maxHp = 5; g.r = 22; }
+  if (kind === 'mountain') { g.solid = true; }
+  G.ground.push(g);
+  return g;
+}
+function spawnGroundCluster() {
+  const r = Math.random();
+  if (r < 0.3) {                         // 島嶼機場＋防空砲
+    const x = rand(130, W - 130), y = -100;
+    addGround('island', x, y);
+    addGround('aa', x - 78, y + 45);
+    if (G.wave >= 2) addGround('aa', x + 82, y - 35);
+  } else if (r < 0.6) {                  // 基地：機庫、建築、雷達塔（可擊毀）
+    const kinds = shuffle(['hangar', 'bRed', 'bBlue', 'radar']);
+    const total = kinds.reduce((s, k) => s + SIZE[k][0], 0) + 14 * (kinds.length - 1);
+    let cx = rand(14, W - total - 14);
+    const y = -50;
+    for (const k of kinds) { addGround(k, cx + SIZE[k][0] / 2, y + rand(-12, 12)); cx += SIZE[k][0] + 14; }
+    if (Math.random() < 0.6) addGround('aa', rand(60, W - 60), y - 85);
+  } else if (r < 0.78) {                 // 橋梁＋防空砲
+    const x = rand(90, W - 90);
+    addGround('bridge', x, -50);
+    addGround('aa', clamp(x + (Math.random() < 0.5 ? -100 : 100), 40, W - 40), -60);
+  } else {                               // 雪山障礙（撞到會受傷）
+    const x = rand(90, W - 90);
+    addGround('mountain', x, -60);
+    addText('前方雪山！小心閃避', x, 60, '#ffffff', 18, 1.6);
+  }
+}
+const ITEM_POOL = () => [['star', 30], ['fuel', 26], ['shield', 14], ['heart', P.hp < P.maxHp ? 16 : 5], ['crate', 14]];
+function spawnItem(kind, x, y) {
+  G.items.push({ kind, x: clamp(x, 25, W - 25), y, baseX: clamp(x, 25, W - 25), t: rand(0, 6) });
+}
+
+/* ---------- 頭目 ---------- */
+function spawnBoss() {
+  const hp = Math.round((70 + (G.wave - 1) * 35) * (0.75 + 0.25 * G.diff.speed));
+  G.boss = { x: W / 2, y: -170, w: SIZE.boss[0], h: SIZE.boss[1], hp, maxHp: hp, t: 0, phase: 'enter', patT: 1.5, pat: 0, flash: 0, droneT: 8 };
+  Sound.play('warning'); Sound.setTrack('boss');
+  G.banner = { text: '警告！頭目來襲', sub: '擊落紅色大型戰機即可進入下一波', t: 2.8, color: '#ff5a6e' };
+}
+function bossPattern(b) {
+  const sp = bulletSpeed();
+  if (b.pat === 0) {                       // 瞄準扇形 5 發
+    const a = aimAngle(b.x, b.y + 60);
+    for (let i = -2; i <= 2; i++) enemyShoot(b.x, b.y + 60, a + i * 0.17, sp);
+  } else if (b.pat === 1) {                // 環狀彈幕
+    const n = 12 + Math.min(8, G.wave * 2), base = rand(0, Math.PI);
+    for (let i = 0; i < n; i++) enemyShoot(b.x, b.y + 10, base + i * Math.PI * 2 / n, sp * 0.75);
+  } else {                                 // 兩側機翼砲連發
+    for (const dx of [-70, 70]) {
+      const a = aimAngle(b.x + dx, b.y + 40);
+      for (let k = 0; k < 3; k++) enemyShoot(b.x + dx, b.y + 40, a, sp * (1 - k * 0.15));
+    }
+  }
+}
+
+/* ---------- 射擊 ---------- */
+function bulletSpeed() { return 210 * G.diff.bullet * (1 + (G.wave - 1) * 0.06); }
+function aimAngle(x, y) { return Math.atan2(P.y - y, P.x - x); }
+function enemyShoot(x, y, ang, sp) { Sound.play('enemyShot'); G.eBullets.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, r: 5 }); }
+function firePlayer() {
+  Sound.play('shoot');
+  const y = P.y - 28, s = -640;
+  const shots = {
+    1: [[0, 0]],
+    2: [[-9, 0], [9, 0]],
+    3: [[-12, -0.12], [0, 0], [12, 0.12]],
+    4: [[-16, -0.18], [-6, 0], [6, 0], [16, 0.18]],
+  }[P.power] || [[0, 0]];
+  for (const [dx, ang] of shots) G.pBullets.push({ x: P.x + dx, y, vx: Math.sin(ang) * -s, vy: Math.cos(ang) * s, dmg: 1 });
+}
+function trySpecial() {
+  if (P.dead) return;
+  if (P.specialCd > 0) { Sound.play('denied'); addText(`特殊攻擊冷卻中 ${P.specialCd.toFixed(1)} 秒`, P.x, P.y - 50, '#9fdcff', 14, 0.8); return; }
+  P.specialCd = CONFIG.special.cooldown;
+  G.specials++;
+  Sound.play('special');
+  P.shieldT = Math.max(P.shieldT, CONFIG.special.shieldTime);
+  for (const b of G.eBullets) { b.dead = true; }
+  G.rings.push({ x: P.x, y: P.y, r: 20, max: 520, t: 0 });
+  for (const e of G.enemies) if (e.y > -20) hitEnemy(e, CONFIG.special.damage);
+  for (const g of G.ground) if (g.target && !g.dead && g.y > 0 && g.y < H) hitGround(g, CONFIG.special.damage);
+  if (G.boss && G.boss.phase !== 'enter') hitBoss(CONFIG.special.bossDamage);
+  G.shake = 8;
+  addText('護盾衝擊波！', P.x, P.y - 60, '#4cc9f0', 22, 1.2);
+}
+
+/* ---------- 傷害與得分 ---------- */
+function addScore(n, x, y) { G.score += n; if (x !== undefined) addText('+' + n, x, y, '#ffd23f', 16, 0.9); }
+function addText(text, x, y, color = '#fff', size = 16, dur = 1.1) { G.texts.push({ text, x: clamp(x, 70, W - 70), y, color, size, t: 0, dur }); }
+function boom(kind, x, y, scale = 1, delay = 0) { G.fx.push({ kind, x, y, scale, t: -delay, dur: kind === 'expL' ? 0.7 : 0.45, rot: rand(-0.4, 0.4) }); }
+
+function hitEnemy(e, dmg) {
+  if (e.dead) return;
+  e.hp -= dmg; e.flash = 0.08;
+  if (e.hp > 0) { Sound.play('hit'); return; }
+  e.dead = true; G.kills++; Sound.play('explodeS');
+  addScore(SCORE[e.type], e.x, e.y);
+  boom('expS', e.x, e.y, 1.1);
+  if (Math.random() < ENEMY[e.type].drop) spawnItem(pickWeighted(ITEM_POOL()), e.x, e.y);
+}
+function hitGround(g, dmg) {
+  if (g.dead) return;
+  g.hp -= dmg; g.flash = 0.08;
+  if (g.hp > 0) { Sound.play('hit'); return; }
+  g.dead = true; G.kills++; Sound.play('explodeL');
+  addScore(SCORE[g.kind], g.x, g.y);
+  boom('expL', g.x, g.y, 0.6);
+  if (g.kind === 'radar' || Math.random() < 0.25) spawnItem(pickWeighted(ITEM_POOL()), g.x, g.y);
+}
+function hitBoss(dmg) {
+  const b = G.boss; if (!b) return;
+  b.hp -= dmg; b.flash = 0.06;
+  if (Math.random() < 0.15) boom('expS', b.x + rand(-80, 80), b.y + rand(-40, 40), 0.6);
+  if (b.hp > 0) { Sound.play('hit'); return; }
+  Sound.play('explodeL'); setTimeout(() => Sound.play('waveClear'), 700); Sound.setTrack('main');
+  const pts = SCORE.bossBase + SCORE.bossPerWave * (G.wave - 1);
+  for (let i = 0; i < 7; i++) boom(i % 2 ? 'expS' : 'expL', b.x + rand(-90, 90), b.y + rand(-50, 50), rand(0.7, 1.2), i * 0.12);
+  addScore(pts, b.x, b.y);
+  G.kills++;
+  spawnItem('crate', b.x - 40, b.y); spawnItem('heart', b.x + 40, b.y);
+  G.eBullets.forEach(x => x.dead = true);
+  G.boss = null; G.wave++; G.waveTime = 0; G.shake = 12;
+  G.banner = { text: `第 ${G.wave} 波`, sub: `頭目擊落！+${pts}　敵人變強了！`, t: 3, color: '#3ddc97' };
+}
+function damagePlayer(reason) {
+  if (P.dead || P.inv > 0) return false;
+  if (P.shieldT > 0) return false;
+  P.hp--; P.inv = CONFIG.player.invulnTime; G.shake = 10;
+  boom('expS', P.x, P.y, 0.9);
+  G.lastHurt = reason || '被敵彈擊中';
+  addText(reason ? `${reason} -1 生命` : '-1 生命', P.x, P.y - 45, '#ff5a6e', 18);
+  mbWrite('H');
+  Sound.play('hurt');
+  if (P.hp <= 0) {
+    P.dead = true; G.dying = 1.6; Sound.play('explodeL'); Sound.stopMusic();
+    boom('expL', P.x, P.y, 1.2); boom('expS', P.x + 20, P.y - 10, 1, 0.2); boom('expL', P.x - 15, P.y + 10, 0.9, 0.4);
+  }
+  return true;
+}
+function collect(it) {
+  it.dead = true;
+  G.itemsTaken++;
+  const c = { star: '#ffd23f', heart: '#ff7aa2', shield: '#4cc9f0', fuel: '#ff9f1c', crate: '#3ddc97' }[it.kind];
+  G.rings.push({ x: it.x, y: it.y, r: 10, max: 70, t: 0, color: c });
+  G.score += SCORE[it.kind];
+  Sound.play({ star: 'powerup', heart: 'heal', shield: 'shield', fuel: 'pickup', crate: 'pickup' }[it.kind]);
+  switch (it.kind) {
+    case 'star':
+      if (P.power < CONFIG.player.maxPower) { P.power++; addText(`+${SCORE.star} 火力升級 Lv${P.power}！`, it.x, it.y - 20, c, 18); }
+      else { G.score += 500; addText(`火力已滿 +${SCORE.star + 500}`, it.x, it.y - 20, c, 18); }
+      break;
+    case 'heart':
+      if (P.hp < P.maxHp) { P.hp++; addText('生命 +1', it.x, it.y - 20, c, 18); }
+      else { G.score += 300; addText(`生命已滿 +${SCORE.heart + 300}`, it.x, it.y - 20, c, 18); }
+      break;
+    case 'shield':
+      P.shieldT = Math.max(P.shieldT, CONFIG.shieldItemTime); addText(`護盾啟動 ${CONFIG.shieldItemTime} 秒`, it.x, it.y - 20, c, 18); break;
+    case 'fuel':
+      P.fuel = Math.min(CONFIG.fuel.max, P.fuel + CONFIG.fuel.refill); G.fuelWarned = false; addText(`燃料 +${CONFIG.fuel.refill}`, it.x, it.y - 20, c, 18); break;
+    case 'crate':
+      P.fuel = Math.min(CONFIG.fuel.max, P.fuel + 40); P.specialCd = 0; G.fuelWarned = false;
+      addText('補給箱：燃料 +40、特殊攻擊充滿！', it.x, it.y - 20, c, 16, 1.6); break;
+  }
+}
+
+/* =====================================================================
+ * 9. 更新
+ * ===================================================================== */
+function readInput() {
+  let x = 0, y = 0;
+  if (keys.has('ArrowLeft') || keys.has('KeyA')) x -= 1;
+  if (keys.has('ArrowRight') || keys.has('KeyD')) x += 1;
+  if (keys.has('ArrowUp') || keys.has('KeyW')) y -= 1;
+  if (keys.has('ArrowDown') || keys.has('KeyS')) y += 1;
+  let fire = keys.has('Space');
+  if (mbUsable()) {
+    if (G) G.usedMicrobit = true;
+    x += tiltAxis(mb.x, mb.offX, settings.invertX);
+    y -= tiltAxis(mb.y, mb.offY, settings.invertY);   // 往前傾（Y 變大）＝往上飛
+    fire = fire || mb.a;
+  }
+  const len = Math.hypot(x, y); if (len > 1) { x /= len; y /= len; }
+  const special = specialRequested; specialRequested = false;
+  return { x, y, fire, special };
+}
+
+function updatePlayer(dt) {
+  const inp = readInput();
+  const sp = CONFIG.player.speed, k = Math.min(1, CONFIG.player.accel * dt);
+  P.vx += (inp.x * sp - P.vx) * k;
+  P.vy += (inp.y * sp - P.vy) * k;
+  P.x = clamp(P.x + P.vx * dt, SIZE.player[0] / 2, W - SIZE.player[0] / 2);
+  P.y = clamp(P.y + P.vy * dt, SIZE.player[1] / 2 + 8, H - SIZE.player[1] / 2 - 6);
+  P.fireT -= dt;
+  if (inp.fire && P.fireT <= 0) { firePlayer(); P.fireT = CONFIG.player.fireInterval * (P.power >= 4 ? 0.85 : 1); }
+  if (inp.special) trySpecial();
+  P.inv = Math.max(0, P.inv - dt);
+  P.shieldT = Math.max(0, P.shieldT - dt);
+  P.specialCd = Math.max(0, P.specialCd - dt);
+  const fuelBefore = P.fuel;
+  P.fuel = Math.max(0, P.fuel - CONFIG.fuel.drainPerSec * dt);
+  if (fuelBefore >= 25 && P.fuel < 25) { Sound.play('fuelLow'); addText('燃料不足！', P.x, P.y - 50, '#ff9f1c', 16); }
+  if (P.fuel <= 0) {
+    if (!G.fuelWarned) { G.fuelWarned = true; Sound.play('denied'); addText('燃料耗盡！快撿燃料', W / 2, H / 2, '#ff9f1c', 22, 2); }
+    P.fuelDmgT -= dt;
+    if (P.fuelDmgT <= 0) { P.fuelDmgT = CONFIG.fuel.emptyDamageEvery; P.inv = 0; P.shieldT = 0; damagePlayer('燃料耗盡'); }
+  } else P.fuelDmgT = CONFIG.fuel.emptyDamageEvery;
+}
+
+function updateEnemies(dt) {
+  for (const e of G.enemies) {
+    e.t += dt; e.flash = Math.max(0, e.flash - dt);
+    switch (e.type) {
+      case 'red': e.y += e.vy * dt; break;
+      case 'orange': e.y += e.vy * dt; e.x = clamp(e.baseX + Math.sin(e.t * 2.4 + e.off) * 75, 25, W - 25); break;
+      case 'purple':
+        if (e.phase === 'enter') {
+          e.y += e.vy * dt;
+          if (e.y >= e.stopY) {
+            e.phase = 'aim'; e.aimT = 0.6;
+            const a = aimAngle(e.x, e.y); for (let i = -1; i <= 1; i++) enemyShoot(e.x, e.y + 20, a + i * 0.25, bulletSpeed());
+          }
+        } else if (e.phase === 'aim') {
+          e.aimT -= dt;
+          if (e.aimT <= 0) {
+            e.phase = 'dive';
+            const a = aimAngle(e.x, e.y), s = 270 * G.diff.speed;
+            e.vx = Math.cos(a) * s; e.vy = Math.max(130, Math.sin(a) * s);
+          }
+        } else { e.x += e.vx * dt; e.y += e.vy * dt; }
+        break;
+      case 'drone':
+        if (e.phase === 'enter') {
+          e.y += e.vy * dt;
+          if (e.y >= e.stopY) { e.phase = 'hover'; e.hoverT = rand(3, 5); e.vx = (Math.random() < 0.5 ? -1 : 1) * 90; }
+        } else if (e.phase === 'hover') {
+          e.x += e.vx * dt; if (e.x < 30 || e.x > W - 30) { e.vx *= -1; e.x = clamp(e.x, 30, W - 30); }
+          e.y += Math.sin(e.t * 3) * 25 * dt;
+          if ((e.hoverT -= dt) <= 0) e.phase = 'leave';
+        } else e.y += 170 * dt;
+        break;
+    }
+    const f = ENEMY[e.type].fire;
+    if (f && e.y > 20 && e.y < H * 0.68) {
+      e.fireT -= dt * G.diff.bullet * (1 + (G.wave - 1) * 0.08);
+      if (e.fireT <= 0) {
+        e.fireT = rand(f[0], f[1]);
+        const a = e.type === 'red' ? clamp(aimAngle(e.x, e.y), Math.PI / 2 - 0.35, Math.PI / 2 + 0.35) : aimAngle(e.x, e.y);
+        enemyShoot(e.x, e.y + 20, a, bulletSpeed());
+      }
+    }
+    if (e.y > H + 70 || e.x < -90 || e.x > W + 90) e.dead = 'gone';
+  }
+  const b = G.boss;
+  if (b) {
+    b.t += dt; b.flash = Math.max(0, b.flash - dt);
+    if (b.phase === 'enter') { b.y += 75 * dt; if (b.y >= 150) { b.y = 150; b.phase = 'fight'; b.t = 0; } }
+    else {
+      b.x = W / 2 + Math.sin(b.t * 0.55) * Math.min(W / 2 - 125, 480);
+      b.y = 150 + Math.sin(b.t * 1.1) * 18;
+      const rage = b.hp < b.maxHp * 0.5;
+      b.patT -= dt * (rage ? 1.45 : 1) * G.diff.bullet;
+      if (b.patT <= 0) { bossPattern(b); b.pat = (b.pat + 1) % 3; b.patT = 1.7; }
+      if ((b.droneT -= dt) <= 0) { b.droneT = 9; spawnDroneGroup(); }
+    }
+  }
+}
+
+function updateWorld(dt) {
+  const sc = CONFIG.scrollSpeed;
+  for (const g of G.ground) {
+    g.y += sc * dt; g.flash = Math.max(0, g.flash - dt);
+    if (g.kind === 'aa' && !g.dead && g.y > 30 && g.y < H - 180) {
+      g.fireT -= dt * G.diff.bullet;
+      if (g.fireT <= 0) { g.fireT = rand(1.6, 2.6); enemyShoot(g.x, g.y - 18, aimAngle(g.x, g.y - 18), bulletSpeed() * 0.9); }
+    }
+    if (g.y - g.h / 2 > H + 10) g.gone = true;
+  }
+  for (const c of G.clouds) { c.y += c.speed * dt; if (c.y - c.h / 2 > H) c.gone = true; }
+  for (const b of G.pBullets) { b.x += b.vx * dt; b.y += b.vy * dt; if (b.y < -30 || b.x < -20 || b.x > W + 20) b.dead = true; }
+  for (const b of G.eBullets) { b.x += b.vx * dt; b.y += b.vy * dt; if (b.y > H + 30 || b.y < -40 || b.x < -30 || b.x > W + 30) b.dead = true; }
+  for (const it of G.items) {
+    it.t += dt; it.y += (it.kind === 'crate' ? 55 : CONFIG.items.fallSpeed) * dt;
+    if (it.kind === 'crate') it.x = it.baseX + Math.sin(it.t * 2) * 18;
+    if (it.y > H + 40) it.dead = true;
+  }
+  for (const f of G.fx) f.t += dt;
+  for (const t of G.texts) { t.t += dt; t.y -= 32 * dt; }
+  for (const r of G.rings) r.t += dt;
+}
+
+function updateSpawns(dt) {
+  if (!G.boss) { G.waveTime += dt; if (G.waveTime >= CONFIG.waveDuration) spawnBoss(); }
+  G.spawnT -= dt;
+  if (G.spawnT <= 0) {
+    spawnEnemy();
+    let base = 1.15 / (G.diff.spawn * dm() * widthFactor());
+    if (G.boss) base *= 2.8;
+    G.spawnT = base * rand(0.7, 1.3);
+  }
+  if ((G.groundT -= dt) <= 0) { spawnGroundCluster(); G.groundT = rand(5, 8) / Math.sqrt(widthFactor()); }
+  if ((G.cloudT -= dt) <= 0) { spawnCloud(); G.cloudT = rand(2.5, 5) / widthFactor(); }
+  if ((G.fuelItemT -= dt) <= 0) { spawnItem('fuel', rand(40, W - 40), -30); G.fuelItemT = CONFIG.items.fuelEvery * rand(0.85, 1.15); }
+  if ((G.crateT -= dt) <= 0) { spawnItem('crate', rand(50, W - 50), -40); G.crateT = CONFIG.items.crateEvery * rand(0.85, 1.15); }
+}
+
+function collisions() {
+  // 玩家子彈 → 敵機 / 頭目 / 地面目標
+  for (const b of G.pBullets) {
+    if (b.dead) continue;
+    for (const e of G.enemies) {
+      if (!e.dead && dist2(b.x, b.y, e.x, e.y) < (e.r + 5) ** 2) { hitEnemy(e, b.dmg); b.dead = true; break; }
+    }
+    if (b.dead) continue;
+    const B = G.boss;
+    if (B && B.y > 20 && inEllipse(b.x, b.y, B.x, B.y - 6, B.w * 0.44, B.h * 0.3, 4)) { hitBoss(b.dmg); b.dead = true; continue; }
+    for (const g of G.ground) {
+      if (g.target && !g.dead && g.y > 0 && dist2(b.x, b.y, g.x, g.y) < (g.r + 5) ** 2) { hitGround(g, b.dmg); b.dead = true; break; }
+    }
+  }
+  if (P.dead) return;
+  const pr = CONFIG.player.hitRadius;
+  const shieldR = 40;
+  // 敵彈 → 玩家（護盾會把子彈擋掉）
+  for (const b of G.eBullets) {
+    if (b.dead) continue;
+    if (P.shieldT > 0 && dist2(b.x, b.y, P.x, P.y) < (shieldR + b.r) ** 2) { b.dead = true; Sound.play('block'); continue; }
+    if (dist2(b.x, b.y, P.x, P.y) < (pr + b.r) ** 2 && P.inv <= 0) { b.dead = true; damagePlayer(); }
+  }
+  // 敵機機身 → 玩家
+  for (const e of G.enemies) {
+    if (e.dead) continue;
+    const rr = P.shieldT > 0 ? shieldR : pr;
+    if (dist2(e.x, e.y, P.x, P.y) < (e.r + rr - 4) ** 2) {
+      if (P.shieldT > 0) hitEnemy(e, 99);
+      else if (P.inv <= 0) { hitEnemy(e, 3); damagePlayer('撞機'); }
+    }
+  }
+  const B = G.boss;
+  if (B && inEllipse(P.x, P.y, B.x, B.y - 6, B.w * 0.42, B.h * 0.28, pr)) damagePlayer('撞上頭目');
+  // 雪山障礙（地面裝飾不會碰撞，只有雪山會）
+  for (const g of G.ground) {
+    if (g.solid && inEllipse(P.x, P.y, g.x, g.y + g.h * 0.08, g.w * 0.36, g.h * 0.3, pr - 3)) damagePlayer('撞上雪山');
+  }
+  // 道具
+  for (const it of G.items) if (!it.dead && dist2(it.x, it.y, P.x, P.y) < 32 ** 2) collect(it);
+}
+
+function cleanup() {
+  const alive = o => !o.dead && !o.gone;
+  G.enemies = G.enemies.filter(alive); G.pBullets = G.pBullets.filter(alive); G.eBullets = G.eBullets.filter(alive);
+  G.items = G.items.filter(alive); G.ground = G.ground.filter(o => !o.gone && !(o.dead && o.target));
+  G.clouds = G.clouds.filter(alive);
+  G.fx = G.fx.filter(f => f.t < f.dur); G.texts = G.texts.filter(t => t.t < t.dur); G.rings = G.rings.filter(r => r.t < 0.5);
+}
+
+function update(dt) {
+  G.time += dt;
+  if (!P.dead) updatePlayer(dt);
+  updateSpawns(dt);
+  updateEnemies(dt);
+  updateWorld(dt);
+  collisions();
+  cleanup();
+  G.shake = Math.max(0, G.shake - dt * 25);
+  if (G.banner && (G.banner.t -= dt) <= 0) G.banner = null;
+  if (P.dead && (G.dying -= dt) <= 0) endGame();
+}
+
+/* =====================================================================
+ * 10. 繪圖
+ * ===================================================================== */
+function sprite(key, x, y, w, h, rot = 0, alpha = 1, flash = false) {
+  const img = IMG[key]; if (!img) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y);
+  if (rot) ctx.rotate(rot);
+  if (flash && HAS_FILTER) ctx.filter = 'brightness(2.6)';
+  ctx.drawImage(img, -w / 2, -h / 2, w, h);
+  ctx.restore();
+}
+// 背景：等比例縮放到畫面寬度，上下交替「鏡像」接在一起，因此可以無縫循環、不會拉伸
+function drawBackground() {
+  const img = IMG.bg;
+  if (!img) { ctx.fillStyle = '#1d5fd0'; ctx.fillRect(0, 0, W, H); return; }
+  const scale = W / img.width;   // 以畫面寬度為準等比例縮放（不拉伸）
+  const tw = img.width * scale, th = img.height * scale;
+  bgTileH = th;
+  const ox = (W - tw) / 2;
+  const y0 = bgScroll % (2 * th);
+  for (let k = -2; k <= 1; k++) {
+    const y = y0 + k * th;
+    if (y > H || y + th < 0) continue;
+    if (((k % 2) + 2) % 2 === 1) {
+      ctx.save(); ctx.translate(0, y + th); ctx.scale(1, -1); ctx.drawImage(img, ox, 0, tw, th); ctx.restore();
+    } else ctx.drawImage(img, ox, y, tw, th);
+  }
+}
+const FONT = getComputedStyle(document.documentElement).getPropertyValue('--font').trim() || 'sans-serif';
+function txt(t, x, y, size, color, align = 'center') {
+  ctx.font = `bold ${size}px ${FONT}`;
+  ctx.textAlign = align; ctx.textBaseline = 'middle';
+  ctx.lineWidth = Math.max(3, size / 5); ctx.strokeStyle = '#000'; ctx.lineJoin = 'round';
+  ctx.strokeText(t, x, y); ctx.fillStyle = color; ctx.fillText(t, x, y);
+}
+
+function render() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#060d17'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(VIEW.scale, 0, 0, VIEW.scale, VIEW.ox, VIEW.oy);   // 等比例縮放，不變形
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
+  renderWorld();
+  ctx.restore();
+}
+function renderWorld() {
+  if (G && G.shake > 0) ctx.translate(rand(-G.shake, G.shake) * 0.6, rand(-G.shake, G.shake) * 0.6);
+  drawBackground();
+  if (!G) return;
+
+  // 1) 地面裝飾（在最底層，不會擋住飛機）
+  for (const g of G.ground) {
+    if (g.kind !== 'island' && g.kind !== 'mountain') {          // 陰影讓建築有立體感
+      ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(g.x + 4, g.y + g.h * 0.38, g.w * 0.45, g.h * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    sprite(g.kind, g.x, g.y, g.w, g.h, 0, 1, g.flash > 0);
+    if (g.target && g.hp < g.maxHp) hpBar(g.x, g.y - g.h / 2 - 6, 36, g.hp / g.maxHp);
+  }
+  // 2) 雲朵（半透明，畫在飛機下面）
+  for (const c of G.clouds) sprite('cloud', c.x, c.y, c.w, c.h, 0, c.alpha);
+  // 3) 道具（外圈閃光讓學生容易看到）
+  for (const it of G.items) {
+    const [w, h] = SIZE[it.kind], pulse = 1 + Math.sin(it.t * 6) * 0.08;
+    ctx.save(); ctx.globalAlpha = 0.35 + Math.sin(it.t * 6) * 0.15; ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(it.x, it.y, 24, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    sprite(it.kind, it.x, it.y, w * pulse, h * pulse, it.kind === 'crate' ? Math.sin(it.t * 2) * 0.15 : 0);
+  }
+  // 4) 敵機與頭目
+  for (const e of G.enemies) {
+    const rot = e.type === 'purple' && e.phase === 'dive' ? Math.atan2(e.vy, e.vx) - Math.PI / 2 : 0;
+    sprite(e.type, e.x, e.y, e.w, e.h, rot, 1, e.flash > 0);
+  }
+  if (G.boss) sprite('boss', G.boss.x, G.boss.y, G.boss.w, G.boss.h, 0, 1, G.boss.flash > 0);
+  // 5) 玩家子彈、玩家
+  for (const b of G.pBullets) sprite('bulletP', b.x, b.y, SIZE.bulletP[0], SIZE.bulletP[1], Math.atan2(b.vy, b.vx) + Math.PI / 2);
+  if (!P.dead) {
+    const blink = P.inv > 0 && Math.floor(P.inv * 12) % 2 === 0;
+    sprite('player', P.x, P.y, SIZE.player[0], SIZE.player[1], P.vx / CONFIG.player.speed * 0.12, blink ? 0.35 : 1);
+    if (P.shieldT > 0) {
+      const a = P.shieldT < 2 ? (Math.floor(P.shieldT * 8) % 2 ? 0.25 : 0.6) : 0.55;
+      ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = '#7fe3ff'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(P.x, P.y, 40, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = a * 0.3; ctx.fillStyle = '#4cc9f0'; ctx.fill(); ctx.restore();
+    }
+  }
+  // 6) 敵彈放在最上層，確保看得清楚
+  for (const b of G.eBullets) sprite('bulletE', b.x, b.y, SIZE.bulletE[0], SIZE.bulletE[1], Math.atan2(b.vy, b.vx) - Math.PI / 2);
+  // 7) 特效
+  for (const f of G.fx) {
+    if (f.t < 0) continue;
+    const p = f.t / f.dur, [w, h] = SIZE[f.kind], s = f.scale * (0.55 + 0.6 * p);
+    sprite(f.kind, f.x, f.y, w * s, h * s, f.rot, 1 - p * p);
+  }
+  for (const r of G.rings) {
+    const p = r.t / 0.5;
+    ctx.save(); ctx.globalAlpha = 1 - p; ctx.strokeStyle = r.color || '#7fe3ff'; ctx.lineWidth = r.color ? 4 : 8;
+    ctx.beginPath(); ctx.arc(r.x, r.y, r.r + (r.max - r.r) * p, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+  }
+  for (const t of G.texts) {
+    ctx.save(); ctx.globalAlpha = Math.min(1, (t.dur - t.t) * 3); txt(t.text, t.x, t.y, t.size, t.color); ctx.restore();
+  }
+  drawCanvasHud();
+}
+function hpBar(x, y, w, p, color = '#3ddc97') {
+  ctx.fillStyle = '#000'; ctx.fillRect(x - w / 2 - 2, y - 3, w + 4, 7);
+  ctx.fillStyle = '#5a1020'; ctx.fillRect(x - w / 2, y - 1, w, 3);
+  ctx.fillStyle = color; ctx.fillRect(x - w / 2, y - 1, w * clamp(p, 0, 1), 3);
+}
+function drawCanvasHud() {
+  // 左上：分數與生命
+  txt('飛行員 ' + playerName, 12, 18, 15, '#cfe8ff', 'left');
+  txt('分數 ' + G.score.toLocaleString(), 12, 43, 22, '#ffd23f', 'left');
+  for (let i = 0; i < P.maxHp; i++) sprite('heart', 22 + i * 24, 72, 21, 19, 0, i < P.hp ? 1 : 0.25);
+  // 右上：波次、擊落、最高分
+  txt(`第 ${G.wave} 波`, W - 12, 22, 20, '#fff', 'right');
+  txt(`擊落 ${G.kills}`, W - 12, 47, 16, '#cfe8ff', 'right');
+  txt('最高 ' + Math.max(cachedHigh, G.score).toLocaleString(), W - 12, 70, 15, '#ffe58a', 'right');
+  // 頭目血條
+  if (G.boss) {
+    const b = G.boss, bw = 260, x = W / 2 - bw / 2, y = 74;
+    ctx.fillStyle = '#000'; ctx.fillRect(x - 3, y - 3, bw + 6, 16);
+    ctx.fillStyle = '#4a0b14'; ctx.fillRect(x, y, bw, 10);
+    ctx.fillStyle = b.hp < b.maxHp * 0.5 ? '#ff9f1c' : '#ff3b54'; ctx.fillRect(x, y, bw * Math.max(0, b.hp / b.maxHp), 10);
+    txt('頭目', x - 8, y + 5, 14, '#fff', 'right');
+  } else {
+    const p = G.waveTime / CONFIG.waveDuration;
+    ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(W / 2 - 60, 16, 120, 6);
+    ctx.fillStyle = '#ff5a6e'; ctx.fillRect(W / 2 - 60, 16, 120 * p, 6);
+    txt('頭目接近', W / 2, 32, 11, '#ffd0d6');
+  }
+  // 左下：特殊攻擊冷卻環
+  const cx = 38, cy = H - 40, ready = P.specialCd <= 0;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.beginPath(); ctx.arc(cx, cy, 27, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = ready ? '#4cc9f0' : '#3a5670'; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.arc(cx, cy, 27, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - P.specialCd / CONFIG.special.cooldown)); ctx.stroke();
+  ctx.restore();
+  sprite('shield', cx, cy, 24, 28, 0, ready ? (0.75 + Math.sin(G.time * 6) * 0.25) : 0.4);
+  txt(ready ? '特殊攻擊 OK' : P.specialCd.toFixed(1) + ' 秒', cx + 34, cy - 8, 14, ready ? '#7fe3ff' : '#9fb8d3', 'left');
+  txt(ready ? 'Shift / B 鍵' : '冷卻中', cx + 34, cy + 11, 12, '#cfe8ff', 'left');
+  // 右下：燃料
+  const fx = W - 150, fy = H - 30, fp = P.fuel / CONFIG.fuel.max;
+  sprite('fuel', fx - 16, fy - 4, 22, 25);
+  ctx.fillStyle = '#000'; ctx.fillRect(fx, fy - 9, 136, 14);
+  ctx.fillStyle = fp < 0.25 ? (Math.floor(G.time * 4) % 2 ? '#ff3b54' : '#7a1020') : '#ff9f1c';
+  ctx.fillRect(fx + 2, fy - 7, 132 * fp, 10);
+  txt('燃料 ' + Math.ceil(P.fuel) + '%', fx + 68, fy - 22, 13, '#fff');
+  if (P.power > 1) txt('火力 Lv' + P.power, W - 12, 93, 14, '#ffd23f', 'right');
+  if (P.shieldT > 0) txt('護盾 ' + P.shieldT.toFixed(1) + ' 秒', W / 2, H - 22, 16, '#7fe3ff');
+  if (fp < 0.25 && Math.floor(G.time * 2) % 2 === 0) txt(P.fuel <= 0 ? '燃料耗盡！生命會持續減少' : '燃料不足！', W / 2, H - 70, 18, '#ff9f1c');
+  if (mb.connected && mb.stale) txt('micro:bit 訊號中斷，暫時改用鍵盤', W / 2, 100, 14, '#ff9f1c');
+  // 中央橫幅
+  if (G.banner) {
+    const a = Math.min(1, G.banner.t * 2);
+    ctx.save(); ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(0, H * 0.36 - 40, W, 84);
+    txt(G.banner.text, W / 2, H * 0.36 - 10, 34, G.banner.color);
+    txt(G.banner.sub, W / 2, H * 0.36 + 26, 16, '#fff');
+    ctx.restore();
+  }
+}
+
+/* =====================================================================
+ * 11. 右側 HUD（只有數值改變時才更新，避免浪費效能）
+ * ===================================================================== */
+let cachedHigh = 0;
+let rawT = 0;
+function updateMbRaw(now) {
+  if (now - rawT < 150) return; rawT = now;
+  $('mbRaw').textContent = mb.connected
+    ? `X:${String(mb.x).padStart(4)}  Y:${String(mb.y).padStart(4)}  A:${mb.a ? 1 : 0}  B:${mb.b ? 1 : 0}\n正確 ${mb.good} 筆／錯誤 ${mb.bad} 筆${mb.stale ? '（訊號中斷）' : ''}`
+    : '尚未連線 micro:bit（鍵盤可以正常遊玩）';
+}
+
+/* =====================================================================
+ * 12. 流程：開始、暫停、結束
+ * ===================================================================== */
+const OVERLAYS = ['ovLoading', 'ovStart', 'ovPause', 'ovOver'];
+function showOverlay(id) { OVERLAYS.forEach(o => $(o).classList.toggle('show', o === id)); }
+function updateButtons() {
+  $('btnPause').disabled = state !== 'playing';
+  $('btnResume').disabled = state !== 'paused';
+  $('btnRestart').disabled = !(state === 'playing' || state === 'paused' || state === 'over');
+}
+function focusGame() { if (document.activeElement) document.activeElement.blur(); canvas.focus({ preventScroll: true }); }
+
+function startGame() {
+  if (state === 'loading') return;
+  const name = sanitizeName($('nameInput').value);
+  if (!name) {
+    $('nameErr').textContent = '請先輸入暱稱（1～12 個字，不能只有空白）';
+    showOverlay('ovStart'); state = 'start'; updateButtons();
+    $('nameInput').focus(); return;
+  }
+  $('nameErr').textContent = '';
+  $('nameInput').value = name;
+  playerName = name;
+  settings.lastName = name; settings.difficulty = $('diffSelect').value; saveSettings();
+  beginRun();
+}
+function beginRun() {
+  newGame(); cachedHigh = highScore();
+  Sound.unlock(); Sound.play('start'); Sound.startMusic('main');
+  state = 'playing'; showOverlay(null); updateButtons(); focusGame(); refreshBoards();
+}
+function restartGame() { if (!playerName) { toTitle(); return; } beginRun(); }
+function pauseGame(reason) {
+  if (state !== 'playing' || (P && P.dead)) return;
+  state = 'paused'; keys.clear(); Sound.stopMusic();
+  $('pauseReason').textContent = reason || '按「繼續」或 P 鍵回到遊戲';
+  showOverlay('ovPause'); updateButtons();
+}
+function resumeGame() { if (state !== 'paused') return; state = 'playing'; Sound.startMusic(G.boss ? 'boss' : 'main'); showOverlay(null); updateButtons(); focusGame(); }
+function toTitle() {
+  state = 'start'; G = null; P = null; Sound.stopMusic();
+  showOverlay('ovStart'); updateButtons(); refreshBoards();
+  setTimeout(() => $('nameInput').focus(), 50);
+}
+function endGame() {
+  state = 'over';
+  Sound.stopMusic(); Sound.play('gameOver');
+  const prevHigh = highScore();
+  const rec = { id: uid(), name: playerName, score: G.score, kills: G.kills, wave: G.wave, time: new Date().toISOString() };
+  const res = saveRecord(rec);
+  G.recordId = rec.id;
+  cachedHigh = highScore();
+  $('overName').textContent = `飛行員：${playerName}`;
+  $('overScore').textContent = G.score.toLocaleString() + ' 分';
+  $('overStats').textContent = `擊落 ${G.kills} 架．到達第 ${G.wave} 波`;
+  setOverCloud(Cloud.enabled() ? '' : '（未設定雲端紀錄，成績只存在這台電腦）', false);
+  $('overNew').textContent = G.score > prevHigh && G.score > 0 ? '★ 新的最高紀錄！ ★' : '';
+  $('overRank').textContent = !res.ok ? '（成績無法儲存：' + boardWarning + '）'
+    : res.rank >= 0 ? `你是排行榜第 ${res.rank + 1} 名！` : '這次沒有進入前 10 名，再接再厲！';
+  refreshBoards();
+  showOverlay('ovOver'); updateButtons();
+  // 上傳到 Google 試算表
+  Cloud.submit({
+    id: rec.id, name: playerName, score: G.score, kills: G.kills, wave: G.wave, bosses: G.wave - 1,
+    difficulty: G.diff.label, durationSec: Math.round(G.time * 10) / 10,
+    startedAt: G.startedAt, endedAt: rec.time, endReason: G.lastHurt || '未知',
+    control: G.usedMicrobit ? 'micro:bit' : '鍵盤', specials: G.specials, items: G.itemsTaken,
+    browser: browserSummary(), version: GAME_VERSION,
+  });
+}
+
+// 按鈕綁定
+document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
+  const act = b.dataset.act;
+  if (act === 'resume') resumeGame(); else if (act === 'restart') restartGame(); else if (act === 'title') toTitle();
+}));
+$('btnStart').addEventListener('click', startGame);
+$('btnPause').addEventListener('click', () => pauseGame());
+$('btnResume').addEventListener('click', resumeGame);
+$('btnRestart').addEventListener('click', () => { if (state === 'start') startGame(); else restartGame(); });
+$('btnClearBoard').addEventListener('click', e => {
+  e.currentTarget.blur();
+  if (!confirm('確定要清除所有排行榜紀錄嗎？此動作無法復原。')) return;
+  try { localStorage.removeItem(CONFIG.storage.records); } catch (_) {}
+  boardWarning = ''; cachedHigh = 0; refreshBoards();
+});
+
+// 設定面板
+function bindSettings() {
+  const sens = $('setSens'), dead = $('setDead'), ix = $('setInvX'), iy = $('setInvY');
+  sens.value = settings.sensitivity; dead.value = settings.deadzone; ix.checked = settings.invertX; iy.checked = settings.invertY;
+  const show = () => { $('outSens').textContent = (+sens.value).toFixed(1); $('outDead').textContent = dead.value; };
+  show();
+  const save = () => { settings.sensitivity = +sens.value; settings.deadzone = +dead.value; settings.invertX = ix.checked; settings.invertY = iy.checked; saveSettings(); show(); };
+  [sens, dead, ix, iy].forEach(el => el.addEventListener('input', save));
+  [sens, dead, ix, iy].forEach(el => el.addEventListener('change', () => el.blur()));
+  $('diffSelect').value = settings.difficulty;
+  $('nameInput').value = settings.lastName || '';
+  // 聲音
+  const sv = $('setSfxVol'), mv = $('setMusicVol');
+  sv.value = settings.sfxVol; mv.value = settings.musicVol;
+  const showVol = () => { $('outSfxVol').textContent = Math.round(sv.value * 100); $('outMusicVol').textContent = Math.round(mv.value * 100); };
+  showVol();
+  sv.addEventListener('input', () => { settings.sfxVol = +sv.value; saveSettings(); showVol(); Sound.apply(); });
+  sv.addEventListener('change', () => { sv.blur(); Sound.play('pickup'); });
+  mv.addEventListener('input', () => { settings.musicVol = +mv.value; saveSettings(); showVol(); Sound.apply(); });
+  mv.addEventListener('change', () => mv.blur());
+  updateSoundButtons();
+}
+function updateSoundButtons() {
+  $('btnSfx').textContent = settings.sfxOn ? '音效 開' : '音效 關';
+  $('btnSfx').className = 'btn sm ' + (settings.sfxOn ? 'green' : 'off');
+  $('btnMusic').textContent = settings.musicOn ? '音樂 開' : '音樂 關';
+  $('btnMusic').className = 'btn sm ' + (settings.musicOn ? 'green' : 'off');
+}
+function toggleSound(which) {
+  Sound.unlock();
+  if (which === 'sfx') settings.sfxOn = !settings.sfxOn;
+  else if (which === 'music') settings.musicOn = !settings.musicOn;
+  else { const on = !(settings.sfxOn || settings.musicOn); settings.sfxOn = settings.musicOn = on; }   // M 鍵：全部開／關
+  saveSettings(); Sound.apply(); updateSoundButtons();
+  toast(`音效：${settings.sfxOn ? '開' : '關'}　音樂：${settings.musicOn ? '開' : '關'}`, 1500);
+}
+$('btnSfx').addEventListener('click', e => { e.currentTarget.blur(); toggleSound('sfx'); });
+$('btnMusic').addEventListener('click', e => { e.currentTarget.blur(); toggleSound('music'); });
+
+// 全螢幕
+function toggleFullscreen() {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => toast('這個瀏覽器不允許全螢幕'));
+  else document.exitFullscreen?.();
+}
+$('btnFull').addEventListener('click', e => { e.currentTarget.blur(); toggleFullscreen(); });
+document.addEventListener('fullscreenchange', () => { $('btnFull').textContent = document.fullscreenElement ? '離開全螢幕' : '全螢幕'; });
+
+// 右側抽屜
+function setDrawer(open) {
+  $('drawer').classList.toggle('open', open);
+  if (open) { refreshBoards(); loadTop(); if (state === 'playing') pauseGame('正在查看排行榜／設定，關閉後按「繼續」或 P 鍵回到遊戲'); }
+}
+$('btnDrawer').addEventListener('click', e => { e.currentTarget.blur(); setDrawer(!$('drawer').classList.contains('open')); });
+$('btnDrawerClose').addEventListener('click', () => setDrawer(false));
+
+// 雲端紀錄設定
+function bindCloud() {
+  const inp = $('cloudUrl');
+  inp.value = settings.cloudUrl || CONFIG.cloud.url || '';
+  $('btnCloudSave').addEventListener('click', e => {
+    e.currentTarget.blur();
+    const v = inp.value.trim();
+    settings.cloudUrl = v; saveSettings();
+    if (v && !Cloud.enabled()) { $('cloudStatus').textContent = '網址格式不正確，應為 https://script.google.com/macros/s/…/exec'; return; }
+    toast(v ? '已儲存 GAS 網址' : '已清除 GAS 網址（不上傳）', 2000);
+    Cloud.flush(); loadTop();
+  });
+  $('btnCloudTest').addEventListener('click', async e => {
+    e.currentTarget.blur();
+    settings.cloudUrl = inp.value.trim(); saveSettings();
+    $('cloudStatus').textContent = '測試中…';
+    try { const d = await Cloud.ping(); $('cloudStatus').textContent = `✔ 連線成功：「${d.spreadsheet}」目前有 ${d.rows} 筆紀錄`; loadTop(); }
+    catch (err) { $('cloudStatus').textContent = '✘ 連線失敗：' + err.message; }
+  });
+  $('btnCloudRetry').addEventListener('click', e => { e.currentTarget.blur(); Cloud.flush(); });
+  $('btnCloudTop').addEventListener('click', e => { e.currentTarget.blur(); loadTop(); });
+  window.addEventListener('online', () => Cloud.flush());
+  Cloud.report({ disabled: !Cloud.enabled(), left: Cloud.pending() });
+  if (Cloud.enabled()) Cloud.flush();
+}
+
+// 畫面上方的小提示
+let toastTimer = 0;
+function toast(msg, ms = 4000) {
+  const el = $('toast'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+/* =====================================================================
+ * 13. 主迴圈（requestAnimationFrame）
+ * ===================================================================== */
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));   // 防止切換分頁回來時一次跳太多
+  last = now;
+  if (state !== 'paused' && state !== 'loading') bgScroll += CONFIG.scrollSpeed * dt;
+  if (state === 'playing' || (state === 'over' && G && G.dying > 0)) update(dt);
+  render();
+  mbWatchdog(now);
+  updateMbRaw(now);
+  if (mb.connected) {
+    const mode = state === 'playing' ? (P && P.specialCd > 0 ? 'S' : 'G') : state === 'paused' ? 'P' : state === 'over' ? 'O' : 'C';
+    mbSetMode(mode);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* =====================================================================
+ * 14. 啟動
+ * ===================================================================== */
+(function init() {
+  resize(); bindSettings(); bindCloud(); updateButtons(); updateBtButtons(); refreshBoards();
+  cachedHigh = highScore();
+  if (!navigator.bluetooth) setBt('err', '此瀏覽器不支援藍牙', '請用電腦版 Chrome／Edge 才能連 micro:bit；鍵盤仍可正常遊玩。');
+  else if (!window.isSecureContext) setBt('err', '目前網址無法使用藍牙', '請用 http://localhost 或 https:// 開啟才能連 micro:bit；鍵盤仍可正常遊玩。');
+  requestAnimationFrame(frame);
+  loadAssets().then(missing => {
+    if (missing.length) {
+      $('loadText').style.display = 'none';
+      $('loadErr').style.display = 'block';
+      $('loadErrList').textContent = missing.join('\n');
+      $('loadErrList').style.whiteSpace = 'pre';
+      console.error('找不到圖片：', missing);
+      return;
+    }
+    state = 'start'; showOverlay('ovStart'); updateButtons();
+    $('nameInput').focus();
+  });
+})();
+</script>
+</body>
+</html>
